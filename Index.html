@@ -1,0 +1,661 @@
+<!DOCTYPE html>  
+<html lang="en">  
+<head>  
+    <meta charset="UTF-8">  
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">  
+    <title>ARAF INTELLIGENCE - Pro Terminal</title>  
+    
+    <link rel="icon" type="image/png" sizes="192x192" href="https://i.ibb.co/hRnBwJdv/Neon-A-Growth-Icon.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="https://i.ibb.co/hRnBwJdv/Neon-A-Growth-Icon.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="ARAF INTELLIGENCE">
+    <meta name="theme-color" content="#10141e">  
+
+    <link rel="manifest" href="manifest.json">
+    
+    <!-- Tailwind CSS & FontAwesome Icons -->
+    <script src="https://cdn.tailwindcss.com"></script>  
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">  
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>  
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800;900&family=Hind+Siliguri:wght@400;600;700&display=swap" rel="stylesheet">  
+    
+    <!-- External Third-Party SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+
+    <!-- আমাদের কাস্টম সিএসএস স্টাইলশিট -->
+    <link rel="stylesheet" href="style.css">
+</head>  
+<body class="min-h-screen flex flex-col pb-24 select-none bg-[#10141e] text-slate-100">  
+
+<!-- ১. স্প্ল্যাশ স্ক্রিন -->
+<div id="splashScreen" class="fixed inset-0 z-[9999] flex items-center justify-center bg-[#0d1017] text-white overflow-hidden select-none">  
+    <img id="splashFounderImg" src="https://i.ibb.co/WvKJbzb0/file-000000004c2082079db37621e6f181e3.png" referrerpolicy="no-referrer" alt="ARAF Founder" class="w-full h-full object-cover object-center select-none" />
+</div>  
+
+<!-- ২. কুইক আনলক মডাল -->
+<div id="quickUnlockModal" class="fixed inset-0 z-50 bg-[#0a0d14]/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
+    <div class="groww-card w-full max-w-sm p-6 space-y-4 shadow-2xl text-center relative opportunity-glow">
+        <div class="w-14 h-14 rounded-2xl bg-[#00d09c]/10 border border-[#00d09c]/30 text-[#00d09c] flex items-center justify-center mx-auto text-2xl shadow-inner">
+            <i class="fa-solid fa-fingerprint animate-pulse"></i>
+        </div>
+        <h3 class="text-base font-black text-white tracking-tight heading-font" id="unlockWelcomeTitle">Welcome Back</h3>
+        <p class="text-[10.5px] text-slate-400 font-mono">Unlock Institutional Terminal with PIN or Biometrics</p>
+        <div class="flex justify-center my-2">
+            <input type="password" id="pinDigitInput" maxlength="6" inputmode="numeric" autofocus oninput="if(this.value.length === 6) handlePinSubmitUnlock()" placeholder="• • • • • •" class="w-48 bg-[#121824] border-2 border-[#00d09c]/40 rounded-2xl py-2.5 text-center text-xl font-black text-white tracking-[0.4em] mono-font focus:outline-none focus:border-[#00d09c] shadow-inner">
+        </div>
+        <div id="unlockErrorMsg" class="hidden text-[10px] font-bold text-[#eb5b3c] font-mono"></div>
+        <div class="space-y-2 pt-1">
+            <button onclick="handlePinSubmitUnlock()" id="btnSubmitUnlock" class="w-full groww-btn-green py-3 rounded-xl text-xs active:scale-95 transition shadow-lg flex items-center justify-center space-x-1.5">
+                <i class="fa-solid fa-lock-open mr-1"></i> <span>Unlock Terminal</span>
+            </button>
+            <button onclick="triggerBiometricFingerprintAuth()" id="btnBiometricQuick" class="w-full bg-[#1e2738] hover:bg-[#253147] text-[#00d09c] font-bold py-2.5 rounded-xl text-xs transition border border-[#2b394f] flex items-center justify-center space-x-2 active:scale-95">
+                <i class="fa-solid fa-fingerprint text-base"></i> <span>Use Fingerprint / Touch ID</span>
+            </button>
+        </div>
+        <button onclick="handleSwitchAccountOrDevice()" class="text-[9px] text-slate-500 hover:text-slate-300 font-mono underline block mx-auto pt-1">Switch User / Login on New Device</button>
+    </div>
+</div>
+
+<!-- ৩. ওয়ান-টাইম মাস্টার পিন সেটআপ -->
+<div id="setupPinModal" class="fixed inset-0 z-50 bg-[#0a0d14]/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
+    <div class="groww-card w-full max-w-sm p-6 space-y-4 shadow-2xl text-center">
+        <div class="w-12 h-12 rounded-2xl bg-[#00d09c]/10 text-[#00d09c] flex items-center justify-center mx-auto text-xl border border-[#00d09c]/30">
+            <i class="fa-solid fa-shield-halved"></i>
+        </div>
+        <h3 class="text-sm font-black text-white heading-font">Set 6-Digit Master PIN</h3>
+        <p class="text-[10px] text-slate-400">Secure terminal access with hardware salt-backed PIN</p>
+        <div class="space-y-2 text-left">
+            <div>
+                <label class="text-[9.5px] font-bold text-slate-400 block mb-1">Create 6-Digit PIN</label>
+                <input type="password" id="newPinInput" maxlength="6" inputmode="numeric" placeholder="• • • • • •" class="w-full bg-[#121824] border border-[#232d3f] rounded-xl px-3 py-2 text-center text-sm font-black tracking-widest mono-font text-white focus:outline-none focus:border-[#00d09c]">
+            </div>
+            <div>
+                <label class="text-[9.5px] font-bold text-slate-400 block mb-1">Confirm 6-Digit PIN</label>
+                <input type="password" id="confirmPinInput" maxlength="6" inputmode="numeric" placeholder="• • • • • •" class="w-full bg-[#121824] border border-[#232d3f] rounded-xl px-3 py-2 text-center text-sm font-black tracking-widest mono-font text-white focus:outline-none focus:border-[#00d09c]">
+            </div>
+        </div>
+        <div id="setupPinErrorMsg" class="hidden text-[10px] font-bold text-[#eb5b3c] font-mono"></div>
+        <button onclick="handleSaveInitialPinAndBiometric()" class="w-full groww-btn-green py-2.5 rounded-xl text-xs active:scale-95 transition">Save PIN & Enable Biometrics</button>
+    </div>
+</div>
+
+<!-- ৪. সাবস্ক্রিপশন মডাল (UID ট্র্যাকিং সহ) -->
+<div id="subscriptionLockModal" class="fixed inset-0 z-50 bg-[#0a0d14]/85 backdrop-blur-md flex items-center justify-center p-4 hidden">
+    <div class="groww-card border border-amber-500/40 w-full max-w-sm p-6 space-y-4 shadow-2xl text-center relative opportunity-glow">
+        <div class="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center mx-auto text-2xl shadow-inner">
+            <i class="fa-solid fa-crown animate-bounce"></i>
+        </div>
+        <div>
+            <span class="text-[9px] bg-amber-500 text-black font-mono font-black px-2 py-0.5 rounded shadow-sm">TRIAL EXPIRED</span>
+            <h3 class="text-base font-black text-white mt-1 heading-font">Upgrade to ARAF VIP</h3>
+            <p class="text-[10.5px] text-slate-400 leading-snug mt-1">Your 30-day VIP trial has ended. Renew license to maintain active execution desk.</p>
+        </div>
+
+        <div class="bg-[#121824] border border-[#232d3f] rounded-xl p-2.5 flex items-center justify-between text-left">
+            <div>
+                <span class="text-[8px] text-slate-400 uppercase font-mono block">Your Unique License UID:</span>
+                <b id="displayUserTraderUid" class="text-xs font-black text-[#00d09c] mono-font tracking-wider">ARAF-XXXX-XXXX</b>
+            </div>
+            <button onclick="navigator.clipboard.writeText(document.getElementById('displayUserTraderUid').textContent); alert('UID Copied!');" class="px-2 py-1 bg-[#1e2738] hover:bg-[#28354c] text-slate-300 rounded text-[9px] font-mono border border-[#2b394f] active:scale-95 transition">
+                <i class="fa-solid fa-copy mr-1"></i> Copy
+            </button>
+        </div>
+
+        <div class="bg-[#121824] border border-[#232d3f] rounded-2xl p-3 text-center">
+            <span class="text-[9px] text-slate-400 block uppercase font-bold">Monthly VIP License</span>
+            <div class="text-2xl font-black text-[#00d09c] mono-font mt-0.5">
+                <span id="displayDynamicSubPrice">₹299</span> <span class="text-xs text-slate-400 font-normal">/ month</span>
+            </div>
+            <span class="text-[9px] text-purple-400 font-mono font-bold block mt-1">Verified Merchant: ARAF DIGITAL CENTER</span>
+        </div>
+
+        <button onclick="triggerDirectUpiPayment()" class="w-full bg-[#5f259f] hover:bg-[#4d1d82] text-white font-extrabold py-3.5 rounded-xl text-xs active:scale-95 transition shadow-lg flex items-center justify-center space-x-2">
+            <i class="fa-solid fa-mobile-screen-button text-sm"></i> <span>Pay ₹299 via UPI / PhonePe</span>
+        </button>
+
+        <button onclick="closeSubscriptionModal()" class="text-[9.5px] text-slate-500 hover:text-slate-300 font-mono underline mx-auto block">Explore Free Terminal Features</button>
+    </div>
+</div>
+
+<!-- ৫. অথেন্টিকেশন ও কমপ্লায়েন্ট SEBI KYC গেটওয়ে -->
+<div id="authKycModal" class="fixed inset-0 z-50 bg-[#0a0d14]/85 backdrop-blur-md flex items-center justify-center p-3 hidden">
+    <div class="groww-card w-full max-w-md p-5 space-y-4 shadow-2xl relative">
+        <div class="text-center space-y-1">
+            <div class="inline-flex p-3 bg-[#00d09c]/10 rounded-2xl border border-[#00d09c]/30 text-[#00d09c] mb-1">
+                <i class="fa-solid fa-shield-halved text-2xl"></i>
+            </div>
+            <h2 class="text-lg font-black text-white heading-font">ARAF <span class="text-[#00d09c]">INTELLIGENCE</span></h2>
+        </div>
+
+        <div id="authStepPhone" class="space-y-3.5">
+            <div class="flex space-x-1 font-mono text-[10px] font-bold bg-[#121824] p-1 rounded-xl border border-[#232d3f]">
+                <button type="button" onclick="switchAuthMode('LOGIN')" id="tabAuthLogin" class="flex-1 py-2 rounded-lg groww-btn-green transition shadow-sm">Client ID Login</button>
+                <button type="button" onclick="switchAuthMode('SIGNUP')" id="tabAuthSignup" class="flex-1 py-2 rounded-lg text-slate-400 hover:text-white transition">New Registration</button>
+            </div>
+
+            <!-- ক্লায়েন্ট আইডি লগইন -->
+            <div id="formClientIdLogin" class="space-y-2.5">
+                <div>
+                    <label class="text-[9.5px] font-bold text-slate-400 block mb-1">12-Character Trader UID</label>
+                    <input type="text" id="loginTraderUid" maxlength="13" placeholder="e.g. RAHU-84920153" class="w-full bg-[#121824] border border-[#232d3f] rounded-xl px-3 py-2 text-xs text-[#00d09c] font-black uppercase mono-font focus:outline-none focus:border-[#00d09c]">
+                </div>
+                <div>
+                    <label class="text-[9.5px] font-bold text-slate-400 block mb-1">Custom Security Password</label>
+                    <input type="password" id="loginPassword" placeholder="Enter password" class="w-full bg-[#121824] border border-[#232d3f] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#00d09c]">
+                </div>
+                <button onclick="handleTraderUidLogin()" class="w-full groww-btn-green py-3 rounded-xl text-xs active:scale-95 transition shadow-lg flex items-center justify-center space-x-1.5 mt-1">
+                    <i class="fa-solid fa-lock-open mr-1"></i> <span>Login with Trader UID</span>
+                </button>
+            </div>
+
+            <!-- নতুন রেজিস্ট্রেশন -->
+            <div id="formNewRegistration" class="hidden space-y-2.5">
+                <div>
+                    <label class="text-[9.5px] font-bold text-slate-400 block mb-1">Email Address</label>
+                    <input type="email" id="signupEmailInput" placeholder="trader@domain.com" class="w-full bg-[#121824] border border-[#232d3f] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#00d09c]">
+                </div>
+                <div>
+                    <label class="text-[9.5px] font-bold text-slate-400 block mb-1">Create Password (Min 6 chars)</label>
+                    <input type="password" id="signupPasswordInput" placeholder="••••••••" class="w-full bg-[#121824] border border-[#232d3f] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#00d09c]">
+                </div>
+                <button onclick="handleNewUserSignup()" class="w-full groww-btn-green py-3 rounded-xl text-xs active:scale-95 transition shadow-lg flex items-center justify-center space-x-1.5 mt-1">
+                    <i class="fa-solid fa-user-plus mr-1"></i> <span>Create Account & Generate UID</span>
+                </button>
+                <button onclick="handleGoogleOneTapLogin()" class="w-full bg-white hover:bg-slate-100 text-slate-950 font-extrabold py-2.5 px-3 rounded-xl text-xs active:scale-95 transition flex items-center justify-center space-x-2 border border-slate-300 shadow-sm mt-2">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
+                    <span>Quick Signup with Google</span>
+                </button>
+            </div>
+            <div id="authCustomErrorMsg" class="hidden text-[10px] font-bold text-[#eb5b3c] font-mono text-center"></div>
+        </div>
+
+        <!-- SEBI KYC ফর্ম -->
+        <div id="authStepKyc" class="hidden space-y-3 text-left max-h-[75vh] overflow-y-auto scrollbar-hidden pr-1">
+            <div class="bg-[#00d09c]/10 border border-[#00d09c]/30 p-2.5 rounded-xl flex items-center justify-between">
+                <div>
+                    <span class="text-[8.5px] bg-[#00d09c] text-slate-950 font-black px-1.5 py-0.2 rounded font-mono uppercase">SEBI NORMS</span>
+                    <h4 class="text-xs font-black text-white mt-0.5 heading-font">Institutional Investor KYC Desk</h4>
+                </div>
+                <i class="fa-solid fa-shield-halved text-[#00d09c] text-lg"></i>
+            </div>
+            <div class="space-y-2">
+                <div>
+                    <label class="text-[9.5px] font-bold text-slate-400 block mb-0.5">Full Legal Name (As per PAN)</label>
+                    <input type="text" id="kycFullName" placeholder="e.g. RAHUL SHARMA" class="w-full bg-[#121824] border border-[#232d3f] rounded-xl px-3 py-2 text-xs text-white uppercase focus:outline-none focus:border-[#00d09c]">
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="text-[9.5px] font-bold text-slate-400 block mb-0.5">Date of Birth</label>
+                        <input type="date" id="kycDob" class="w-full bg-[#121824] border border-[#232d3f] rounded-xl px-2.5 py-2 text-xs text-white focus:outline-none focus:border-[#00d09c]">
+                    </div>
+                    <div>
+                        <label class="text-[9.5px] font-bold text-slate-400 block mb-0.5">Contact Number</label>
+                        <input type="tel" id="kycPhone" maxlength="10" placeholder="10-digit mobile" class="w-full bg-[#121824] border border-[#232d3f] rounded-xl px-3 py-2 text-xs text-white mono-font focus:outline-none focus:border-[#00d09c]">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="text-[9.5px] font-bold text-slate-400 block mb-0.5">PAN Number</label>
+                        <input type="text" id="kycPanNumber" maxlength="10" placeholder="ABCDE1234F" class="w-full bg-[#121824] border border-[#232d3f] rounded-xl px-3 py-2 text-xs text-amber-400 uppercase font-black mono-font focus:outline-none focus:border-[#00d09c]">
+                    </div>
+                    <div>
+                        <label class="text-[9.5px] font-bold text-slate-400 block mb-0.5">Aadhaar Last 4</label>
+                        <input type="password" id="kycAadhaarLast4" maxlength="4" placeholder="•••• 8912" class="w-full bg-[#121824] border border-[#232d3f] rounded-xl px-3 py-2 text-xs text-white text-center mono-font focus:outline-none focus:border-[#00d09c]">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="text-[9.5px] font-bold text-slate-400 block mb-0.5">Income Bracket</label>
+                        <select id="kycIncome" class="w-full bg-[#121824] border border-[#232d3f] rounded-xl px-2 py-2 text-[11px] text-white focus:outline-none">
+                            <option value="1_5L">₹1L - ₹5L</option>
+                            <option value="5_15L" selected>₹5L - ₹15L</option>
+                            <option value="15_25L">₹15L - ₹25L</option>
+                            <option value="25L_PLUS">Above ₹25L (HNI)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-[9.5px] font-bold text-slate-400 block mb-0.5">Experience</label>
+                        <select id="kycExperience" class="w-full bg-[#121824] border border-[#232d3f] rounded-xl px-2 py-2 text-[11px] text-white focus:outline-none">
+                            <option value="INTERMEDIATE" selected>1-3 Yrs</option>
+                            <option value="PRO">3+ Yrs</option>
+                            <option value="BEGINNER">Under 1 Yr</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label class="text-[9.5px] font-bold text-slate-400 block mb-0.5">Trading Authorization</label>
+                    <select id="kycSegment" class="w-full bg-[#121824] border border-[#232d3f] rounded-xl px-2 py-2 text-[11px] text-[#00d09c] font-bold focus:outline-none">
+                        <option value="ALL">NSE F&O + Equity Cash + Crypto Desk</option>
+                        <option value="FNO_ONLY">NSE Derivatives Only</option>
+                        <option value="CRYPTO_ONLY">Crypto Futures Only</option>
+                    </select>
+                </div>
+                <div class="p-2.5 rounded-xl bg-[#121824] border border-[#232d3f]">
+                    <label class="flex items-start space-x-2 cursor-pointer">
+                        <input type="checkbox" id="kycRiskConsent" class="mt-0.5 rounded border-slate-700 text-[#00d09c] focus:ring-0 bg-slate-900">
+                        <span class="text-[9px] text-slate-400 leading-snug">I declare all details authentic. I understand capital derivatives carry risk and I trade within disciplined limits.</span>
+                    </label>
+                </div>
+            </div>
+            <div id="kycErrorBanner" class="hidden text-[10px] font-mono font-bold text-[#eb5b3c] text-center"></div>
+            <button onclick="handleSubmitForVerification()" class="w-full groww-btn-green py-3 rounded-xl text-xs active:scale-95 transition flex items-center justify-center space-x-1.5">
+                <i class="fa-solid fa-file-shield"></i> <span>Submit Formal Verification to Vault</span>
+            </button>
+        </div>
+
+        <div id="authStepPending" class="hidden space-y-3 text-center py-3">
+            <div class="w-12 h-12 rounded-full bg-[#00d09c]/10 border border-[#00d09c]/30 text-[#00d09c] flex items-center justify-center mx-auto text-xl">
+                <i class="fa-solid fa-spinner animate-spin"></i>
+            </div>
+            <h3 class="text-sm font-black text-white heading-font">Syncing with Cloud Vault...</h3>
+            <p class="text-[11px] text-slate-400">Identity record saved. Unlocking trading terminal...</p>
+        </div>
+    </div>
+</div>
+
+<!-- ৬. অপরচুনিটি টোস্ট ও পপআপ -->
+<div id="liveOpportunityToast" class="hidden fixed top-12 left-3 right-3 z-30 bg-[#18202e] border-2 border-[#00d09c] rounded-2xl p-3 shadow-2xl animate-bounce cursor-pointer" onclick="scrollToCurrentOpportunityCard()">  
+    <div class="flex items-start justify-between">  
+        <div class="flex items-start space-x-2.5">  
+            <div id="toastIconBox" class="w-8 h-8 rounded-xl bg-[#00d09c]/20 text-[#00d09c] flex items-center justify-center text-xs shrink-0 mt-0.5 shadow-sm"><i class="fa-solid fa-crosshairs"></i></div>  
+            <div>  
+                <div class="flex items-center space-x-1.5">  
+                    <span id="toastBadge" class="bg-[#00d09c] text-slate-950 text-[8.5px] font-black px-1.5 py-0.5 rounded uppercase font-mono">STRICT INTRADAY</span>  
+                    <h4 id="toastStockTitle" class="text-xs font-bold text-white heading-font">NIFTY 50</h4>  
+                </div>  
+                <p id="toastCandleDesc" class="text-[10px] text-slate-300 mt-0.5 leading-tight font-medium"></p>  
+            </div>  
+        </div>  
+        <button onclick="event.stopPropagation(); dismissOpportunityToast()" class="text-slate-400 hover:text-white text-xs p-1"><i class="fa-solid fa-xmark"></i></button>  
+    </div>  
+</div>  
+
+<div id="opportunityPopupModal" class="fixed inset-0 z-50 bg-[#0a0d14]/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
+    <div class="groww-card border border-[#00d09c]/40 w-full max-w-md p-5 space-y-4 shadow-2xl opportunity-glow relative text-center">
+        <div class="inline-flex p-3 bg-[#00d09c]/10 rounded-2xl border border-[#00d09c]/30 text-[#00d09c] mb-1">
+            <i class="fa-solid fa-crosshairs text-3xl animate-spin" style="animation-duration: 6s;"></i>
+        </div>
+        <div>
+            <div class="flex items-center justify-center space-x-2">
+                <span class="text-[8.5px] bg-amber-500 text-black font-mono font-black px-2 py-0.5 rounded shadow-sm">⚡ STRICT INTRADAY ONLY</span>
+                <span id="oppPopupConfluenceBadge" class="text-[8.5px] bg-[#00d09c]/20 text-[#00d09c] font-mono font-bold px-2 py-0.5 rounded border border-[#00d09c]/30">CONFIRMED DELTA</span>
+            </div>
+            <h2 id="oppPopupTitle" class="text-lg font-black text-white mt-1 heading-font">BREAKOUT</h2>
+            <p id="oppPopupSubtitle" class="text-[11px] text-slate-300 font-medium mt-1">Institutional block orderbook imbalance detected.</p>
+        </div>
+        <div class="grid grid-cols-3 gap-2 bg-[#121824] p-3 rounded-2xl border border-[#232d3f] mono-font text-[10px]">
+            <div><span class="text-slate-400 block text-[8px] uppercase font-bold">Sniper Entry</span><b id="oppPopupEntry" class="text-white text-xs font-black">₹0.00</b></div>
+            <div><span class="text-slate-400 block text-[8px] uppercase font-bold">Micro Stop Loss</span><b id="oppPopupSL" class="text-[#eb5b3c] text-xs font-black">₹0.00</b></div>
+            <div><span class="text-slate-400 block text-[8px] uppercase font-bold">Target (RRR 1:2.5+)</span><b id="oppPopupTarget" class="text-[#00d09c] text-xs font-black">₹0.00</b></div>
+        </div>
+        <div class="space-y-2 pt-1">
+            <button onclick="executeOpportunityTradeNow()" id="btnExecuteOpp" class="w-full groww-btn-green py-3 rounded-xl text-xs active:scale-95 transition shadow-lg flex items-center justify-center space-x-2">
+                <i class="fa-solid fa-bolt text-sm"></i> <span>Execute Verified Intraday Order (SL Protected)</span>
+            </button>
+            <div class="flex space-x-2">
+                <button onclick="repeatOpportunityVoice()" class="flex-1 bg-[#1e2738] hover:bg-[#28354c] text-[#00d09c] font-bold py-2 rounded-xl text-[10px] transition border border-[#2b394f] flex items-center justify-center space-x-1"><i class="fa-solid fa-volume-high mr-1"></i> Replay</button>
+                <button onclick="dismissOpportunityPopup()" class="flex-1 bg-[#1e2738] hover:bg-[#28354c] border border-[#2b394f] text-slate-300 font-bold py-2 rounded-xl text-[10px] transition">Dismiss</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ৭. ক্যানভাস অ্যানালাইসিস মোডাল -->
+<div id="analysisModal" class="fixed inset-0 z-50 bg-[#0a0d14]/80 backdrop-blur-sm hidden flex items-end sm:items-center justify-center p-0 sm:p-3">  
+    <div class="groww-card rounded-t-3xl sm:rounded-3xl w-full max-w-md p-4 space-y-3 max-h-[92vh] overflow-y-auto scrollbar-hidden shadow-2xl">  
+        <div class="flex items-center justify-between border-b border-[#232d3f] pb-2.5">  
+            <div><h3 id="modalAssetTitle" class="text-sm font-extrabold text-white heading-font">ASSET NAME</h3><p id="modalAssetPrice" class="text-xs text-[#00d09c] mono-font font-bold">PRICE</p></div>  
+            <button onclick="closeAnalysisModal()" class="w-8 h-8 rounded-full bg-[#1e2738] text-slate-400 hover:text-white flex items-center justify-center active:scale-95 transition"><i class="fa-solid fa-xmark text-sm"></i></button>  
+        </div>  
+        <div class="grid grid-cols-2 gap-2 mono-font text-xs">  
+            <div class="bg-[#00d09c]/10 p-2.5 rounded-xl border border-[#00d09c]/20 flex items-center justify-between"><div><span class="text-[9px] text-slate-400 block font-sans">🔼 High</span><span id="modalTodayHigh" class="text-[#00d09c] font-bold">-</span></div><i class="fa-solid fa-arrow-trend-up text-[#00d09c] text-xs"></i></div>  
+            <div class="bg-[#eb5b3c]/10 p-2.5 rounded-xl border border-[#eb5b3c]/20 flex items-center justify-between"><div><span class="text-[9px] text-slate-400 block font-sans">🔽 Low</span><span id="modalTodayLow" class="text-[#eb5b3c] font-bold">-</span></div><i class="fa-solid fa-arrow-trend-down text-[#eb5b3c] text-xs"></i></div>  
+        </div>  
+        <div class="grid grid-cols-2 gap-2 mono-font text-xs">  
+            <div class="bg-[#121824] p-2 rounded-xl border border-[#232d3f] flex items-center justify-between"><div><span class="text-[9px] text-slate-400 block font-sans">🟢 Support (S1)</span><span id="modalSupportLevel" class="text-[#00d09c] font-bold">-</span></div><span class="text-[8px] bg-[#00d09c]/20 text-[#00d09c] px-1 py-0.5 rounded font-bold">S1</span></div>  
+            <div class="bg-[#121824] p-2 rounded-xl border border-[#232d3f] flex items-center justify-between"><div><span class="text-[9px] text-slate-400 block font-sans">🔴 Resistance (R1)</span><span id="modalResistanceLevel" class="text-[#eb5b3c] font-bold">-</span></div><span class="text-[8px] bg-[#eb5b3c]/20 text-[#eb5b3c] px-1 py-0.5 rounded font-bold">R1</span></div>  
+        </div>  
+        <div class="bg-[#121824] p-3 rounded-2xl border border-[#232d3f] space-y-2 shadow-sm">  
+            <div class="flex items-center justify-between text-[10px]"><span class="font-bold text-white flex items-center"><i class="fa-solid fa-chart-candlestick text-[#00d09c] mr-1.5"></i> Real Candlestick Canvas & Grid</span><span class="text-[9px] mono-font text-slate-400">TF: 15m Canonical</span></div>  
+            <div class="relative w-full h-40 bg-[#0d121c] rounded-xl overflow-hidden border border-[#232d3f]"><canvas id="assetCandleCanvas" class="w-full h-full block"></canvas></div>  
+            <div class="flex items-center justify-between text-[9px] text-slate-400 pt-0.5 font-medium"><span class="flex items-center"><span class="w-2.5 h-0.5 bg-[#eb5b3c] mr-1"></span> Red: Resistance</span><span class="flex items-center"><span class="w-2.5 h-0.5 bg-[#00d09c] mr-1"></span> Green: Support</span></div>  
+        </div>  
+        <div class="space-y-2 text-xs">  
+            <div class="bg-[#121824] p-2.5 rounded-xl border border-[#232d3f] space-y-1"><h4 class="font-bold text-amber-400 flex items-center text-[11px]"><i class="fa-solid fa-circle-question mr-1.5"></i> Market Context</h4><p id="modalWhatText" class="text-slate-300 text-[10px] leading-relaxed"></p></div>  
+            <div class="bg-[#121824] p-2.5 rounded-xl border border-[#232d3f] space-y-1"><h4 class="font-bold text-blue-400 flex items-center text-[11px]"><i class="fa-solid fa-magnifying-glass-chart mr-1.5"></i> Orderflow Delta</h4><p id="modalWhyText" class="text-slate-300 text-[10px] leading-relaxed"></p></div>  
+            <div class="bg-[#121824] p-2.5 rounded-xl border border-[#232d3f] space-y-1"><h4 class="font-bold text-[#00d09c] flex items-center text-[11px]"><i class="fa-solid fa-calculator mr-1.5"></i> Execution Rules</h4><p id="modalHowText" class="text-slate-300 text-[10px] leading-relaxed"></p></div>  
+        </div>  
+        <div class="grid grid-cols-3 gap-1.5 bg-[#121824] p-2 rounded-xl border border-[#232d3f] mono-font text-[10px]">  
+            <div class="text-center"><span class="text-slate-400 text-[9px] block font-sans">Entry</span><span id="modalEntry" class="text-[#00d09c] font-bold">-</span></div>  
+            <div class="text-center border-l border-[#232d3f]"><span class="text-slate-400 text-[9px] block font-sans">Target</span><span id="modalTarget" class="text-white font-bold">-</span></div>  
+            <div class="text-center border-l border-[#232d3f]"><span class="text-slate-400 text-[9px] block font-sans">Stop Loss</span><span id="modalSl" class="text-[#eb5b3c] font-bold">-</span></div>  
+        </div>  
+        <button onclick="closeAnalysisModal()" class="w-full groww-btn-green py-2.5 rounded-xl text-xs active:scale-95 transition shadow-lg">Return to Terminal</button>  
+    </div>  
+</div>  
+
+<!-- ৮. মার্কেট টিকার ও হেডার HUD -->
+<div class="bg-[#0e121b] text-slate-300 border-b border-[#1e2638] py-1.5 overflow-hidden text-[10px] mono-font flex items-center sticky top-0 z-30 shadow-md">  
+    <div class="bg-[#00d09c] text-slate-950 px-2.5 py-0.5 text-[8.5px] font-black uppercase tracking-wider border-r border-[#1e2638] flex items-center shrink-0"><span class="w-1.5 h-1.5 rounded-full bg-slate-950 mr-1.5 animate-ping"></span> LIVE</div>  
+    <div class="overflow-hidden w-full whitespace-nowrap">  
+        <div class="ticker-wrapper space-x-7 px-4 text-slate-400 font-medium">  
+            <span>NIFTY: <b id="tickerNifty" class="ml-1 text-white font-bold">Connecting...</b> <span id="tickerNiftyChange" class="text-[#00d09c] ml-0.5 text-[9px] font-bold"></span></span>  
+            <span>BANKNIFTY: <b id="tickerBankNifty" class="ml-1 text-white font-bold">Connecting...</b> <span id="tickerBankNiftyChange" class="text-[#00d09c] ml-0.5 text-[9px] font-bold"></span></span>  
+            <span>BTC/USDT: <b id="tickerBtc" class="ml-1 text-[#00d09c] font-bold">Stream...</b></span>  
+            <span>ETH/USDT: <b id="tickerEth" class="ml-1 text-[#00d09c] font-bold">Stream...</b></span>  
+            <span>PAXG/USDT: <b id="tickerGold" class="ml-1 text-amber-400 font-bold">Stream...</b></span>  
+            <span>INDIA VIX: <b id="tickerVix" class="ml-1 text-white font-bold">14.20</b></span>  
+        </div>  
+    </div>  
+</div>  
+
+<header class="bg-[#10141e]/90 backdrop-blur-xl border-b border-[#1e2638] px-4 py-2.5 flex items-center justify-between sticky top-[29px] z-30 shadow-lg">  
+    <div class="flex items-center space-x-2.5">  
+        <img src="https://i.ibb.co/hRnBwJdv/Neon-A-Growth-Icon.png" alt="ARAF Logo" style="width: 32px; height: 32px; object-fit: contain; border-radius: 9px; border: 1px solid rgba(0,208,156,0.3);" />  
+        <div>  
+            <div class="flex items-center space-x-1.5"><h1 class="text-xs sm:text-sm font-black tracking-tight text-white heading-font">ARAF <span class="text-[#00d09c]">INTELLIGENCE</span></h1><span id="hudVipTrialBadge" class="text-[8px] gold-badge px-1.5 py-0.2 rounded font-mono">👑 30D TRIAL</span></div>
+            <p id="hudUserStatusText" class="text-[9px] text-slate-400 flex items-center font-mono mt-0.5"><span class="w-1.5 h-1.5 rounded-full bg-[#00d09c] animate-pulse mr-1"></span> Guardian Armed • Live Ready</p>  
+        </div>  
+    </div>  
+    <div class="flex items-center space-x-2">
+        <button onclick="testOpportunityAlert()" title="Run Real Opportunity Scan" class="px-2.5 py-1 bg-[#00d09c]/10 hover:bg-[#00d09c]/20 text-[#00d09c] text-[9px] font-mono font-bold rounded-xl border border-[#00d09c]/30 active:scale-95 transition flex items-center space-x-1"><i class="fa-solid fa-crosshairs text-[10px]"></i> <span>Sniper Scan</span></button>
+        <button onclick="switchTab('Settings')" class="w-8 h-8 rounded-xl bg-[#18202e] border border-[#232d3f] text-slate-300 flex items-center justify-center active:scale-95 transition hover:bg-[#202b3d]"><i class="fa-solid fa-sliders text-xs"></i></button>  
+    </div>
+</header>  
+
+<!-- ৯. এআই অডিও ফ্লোটিং বার (উইথ লাইভ ওয়েভ অ্যানিমেশন) -->
+<div id="aiVoiceControlBar" class="fixed top-24 left-1/2 -translate-x-1/2 z-40 bg-[#18202e]/95 border border-[#00d09c]/40 backdrop-blur-xl px-4 py-2 rounded-2xl shadow-2xl flex items-center space-x-3 hidden w-[90%] max-w-sm transition-all duration-300">
+    <div class="flex items-center space-x-1">
+        <span class="audio-bar"></span>
+        <span class="audio-bar"></span>
+        <span class="audio-bar"></span>
+    </div>
+    <div class="flex-1 overflow-hidden"><span class="text-[9px] text-[#00d09c] font-mono font-bold uppercase block leading-none">ARAF Voice Radar</span><p id="voicePlayingTitle" class="text-[10px] text-white truncate font-semibold mt-0.5">Market alert broadcast...</p></div>
+    <div class="flex items-center space-x-1.5">
+        <button onclick="pauseResumeAiVoice()" id="btnPauseResume" class="w-7 h-7 rounded-lg bg-[#121824] border border-[#232d3f] text-amber-400 flex items-center justify-center active:scale-95"><i id="pauseResumeIcon" class="fa-solid fa-pause text-xs"></i></button>
+        <button onclick="stopAiVoice()" class="w-7 h-7 rounded-lg bg-[#eb5b3c] border border-rose-500 text-white flex items-center justify-center active:scale-95"><i class="fa-solid fa-stop text-xs"></i></button>
+    </div>
+</div>
+
+<!-- ১০. ট্যাব ১: মেইন টার্মিনাল ডেস্ক -->
+<main id="tabContentHome" class="tab-page p-3 space-y-3 max-w-md mx-auto w-full">  
+    <div class="space-y-2">  
+        <div class="relative">  
+            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><i class="fa-solid fa-magnifying-glass text-[#00d09c] text-xs"></i></div>  
+            <input type="text" id="stockSearchInput" oninput="handleRealStockSearch()" placeholder="Search Stock, Index (e.g. Nifty, Reliance, BTC)..." class="w-full bg-[#18202e] border border-[#232d3f] rounded-xl pl-9 pr-8 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#00d09c] shadow-inner transition">  
+            <button onclick="clearSearchInput()" class="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-500 hover:text-slate-300"><i class="fa-solid fa-circle-xmark text-xs"></i></button>  
+        </div>  
+        <div id="searchNewsBox" class="hidden bg-[#00d09c]/10 border border-[#00d09c]/30 rounded-xl p-2.5 text-[11px] space-y-1">  
+            <div class="flex items-center justify-between text-[#00d09c] font-bold"><span><i class="fa-solid fa-bolt mr-1"></i> Universal Radar:</span><span class="text-[9px] bg-[#00d09c]/20 text-[#00d09c] px-1.5 py-0.5 rounded mono-font font-bold">VERIFIED ASSET</span></div>  
+            <p id="searchNewsText" class="text-slate-300 text-[10px] leading-relaxed"></p>  
+        </div>  
+    </div>  
+
+    <div id="greenAlertBanner" class="groww-card border border-[#00d09c]/30 rounded-2xl p-3 flex items-start justify-between shadow-lg opportunity-glow">
+        <div class="flex items-start space-x-2.5">
+            <div class="w-8 h-8 rounded-xl bg-[#00d09c] text-slate-950 flex items-center justify-center shrink-0 text-sm shadow-md font-black"><i class="fa-solid fa-bolt animate-bounce"></i></div>
+            <div>
+                <div class="flex items-center space-x-1.5"><span class="text-[8.5px] bg-[#00d09c] text-slate-950 font-black px-1.5 py-0.2 rounded font-mono">INTRADAY RADAR</span><span id="alertAssetBadge" class="text-xs font-black text-white heading-font">NIFTY 50: QUANT EDGE</span></div>
+                <p id="alertAssetText" class="text-[10px] text-slate-300 leading-snug mt-0.5">Real-time canonical orderbook feed active.</p>
+            </div>
+        </div>
+        <button onclick="explainTextFriendly(document.getElementById('alertAssetText').textContent, 'Radar Update')" class="p-1 text-[#00d09c] hover:text-[#05dfa8] shrink-0 ml-1"><i class="fa-solid fa-circle-play text-lg"></i></button>
+    </div>
+
+    <div class="groww-card rounded-2xl p-2.5 shadow-lg">
+        <div class="flex items-center justify-between pb-2 px-1 border-b border-[#232d3f]">
+            <div class="flex items-center space-x-2"><i class="fa-solid fa-chart-candlestick text-[#00d09c] text-xs"></i><span id="tvChartCurrentTitle" class="text-xs font-black text-white mono-font">NSE:NIFTY</span><span class="text-[8px] bg-[#121824] text-slate-400 px-1.5 py-0.2 rounded font-mono font-bold border border-[#232d3f]">1M / 5M</span></div>
+            <span class="text-[9px] text-[#00d09c] font-mono font-bold flex items-center"><span class="w-1.5 h-1.5 rounded-full bg-[#00d09c] animate-ping mr-1"></span> Live Interactive</span>
+        </div>
+        <div id="tvLiveChartFrame" style="height: 290px; width: 100%; border-radius: 12px; overflow: hidden; margin-top: 8px;"></div>
+    </div>
+
+    <div class="flex space-x-1.5 overflow-x-auto scrollbar-hidden py-0.5 text-xs font-bold" id="categoryFilterBar">
+        <button onclick="filterCategory('all')" id="catBtn_all" class="px-3.5 py-1.5 rounded-xl bg-[#00d09c] text-slate-950 font-black shadow-md shrink-0 transition">⚡ All Active</button>
+        <button onclick="filterCategory('indian')" id="catBtn_indian" class="px-3.5 py-1.5 rounded-xl bg-[#18202e] border border-[#232d3f] text-slate-400 shadow-sm shrink-0 transition">🇮🇳 Indices & Stocks</button>
+        <button onclick="filterCategory('crypto')" id="catBtn_crypto" class="px-3.5 py-1.5 rounded-xl bg-[#18202e] border border-[#232d3f] text-slate-400 shadow-sm shrink-0 transition">🪙 Crypto</button>
+        <button onclick="filterCategory('commodity')" id="catBtn_commodity" class="px-3.5 py-1.5 rounded-xl bg-[#18202e] border border-[#232d3f] text-slate-400 shadow-sm shrink-0 transition">🟡 Gold (PAXG)</button>
+    </div>
+
+    <div id="assetsFeedContainer" class="space-y-2.5"></div>
+</main>  
+
+<!-- ১১. ট্যাব ২: নিউজ ও ম্যাক্রো এনালিটিক্স -->
+<main id="tabContentNewsAi" class="tab-page hidden p-3 space-y-3.5 max-w-md mx-auto w-full text-xs">
+    <div class="groww-card border border-[#00d09c]/30 rounded-2xl p-3.5 shadow-lg space-y-2">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+                <div class="w-7 h-7 rounded-xl bg-[#00d09c]/20 text-[#00d09c] flex items-center justify-center font-bold text-xs border border-[#00d09c]/30"><i class="fa-solid fa-bullseye"></i></div>
+                <div>
+                    <h3 class="font-black text-white text-xs flex items-center heading-font"><span id="newsActiveTargetLabel">NIFTY 50 FOCUS</span> <span class="text-[8px] bg-[#00d09c]/20 text-[#00d09c] px-1.5 rounded ml-1.5 font-mono">SELECTED FOCUS</span></h3>
+                    <p class="text-[9px] text-slate-400 font-mono">Autonomous AI Background Radar active</p>
+                </div>
+            </div>
+            <button onclick="speakSelectedAssetAudioDigest()" class="groww-btn-green px-2.5 py-1 rounded-xl text-[10px] font-black flex items-center space-x-1 shadow-md transition"><i class="fa-solid fa-headphones mr-1"></i> <span>Smart Digest</span></button>
+        </div>
+
+        <div class="flex items-center justify-between pt-1 border-t border-[#232d3f]">
+            <span class="text-[9px] font-bold text-slate-400 font-mono">DIGEST VOICE:</span>
+            <div class="flex space-x-1 text-[8.5px] font-mono font-bold" id="newsLanguagePillsContainer">
+                <button onclick="setNewsDigestLanguage('en-US')" id="btnNewsLang_en" class="px-2 py-0.5 rounded bg-[#00d09c] text-slate-950 font-black">EN</button>
+                <button onclick="setNewsDigestLanguage('bn-IN')" id="btnNewsLang_bn" class="px-2 py-0.5 rounded bg-[#1e2738] text-slate-400 font-bold">বাংলা</button>
+                <button onclick="setNewsDigestLanguage('hi-IN')" id="btnNewsLang_hi" class="px-2 py-0.5 rounded bg-[#1e2738] text-slate-400 font-bold">हिंदी</button>
+                <button onclick="setNewsDigestLanguage('gu-IN')" id="btnNewsLang_gu" class="px-2 py-0.5 rounded bg-[#1e2738] text-slate-400 font-bold">ગુજ</button>
+                <button onclick="setNewsDigestLanguage('mr-IN')" id="btnNewsLang_mr" class="px-2 py-0.5 rounded bg-[#1e2738] text-slate-400 font-bold">मराठी</button>
+                <button onclick="setNewsDigestLanguage('ta-IN')" id="btnNewsLang_ta" class="px-2 py-0.5 rounded bg-[#1e2738] text-slate-400 font-bold">தமிழ்</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex space-x-1 font-mono text-[9.5px] font-bold bg-[#121824] p-1 rounded-2xl border border-[#232d3f]">
+        <button onclick="switchNewsTabCategory('stock_only')" id="newsTab_stock_only" class="flex-1 py-1.5 rounded-xl bg-[#00d09c] text-slate-950 font-black transition shadow-sm">🎯 Stock Specific</button>
+        <button onclick="switchNewsTabCategory('geopolitical')" id="newsTab_geopolitical" class="flex-1 py-1.5 rounded-xl text-slate-400 hover:text-white transition">🌍 Geopolitics & Macro</button>
+        <button onclick="switchNewsTabCategory('all_breaking')" id="newsTab_all_breaking" class="flex-1 py-1.5 rounded-xl text-slate-400 hover:text-white transition">⚡ All Market Wire</button>
+    </div>
+
+    <div class="space-y-2">
+        <div class="flex items-center justify-between px-1">
+            <span id="newsFilterCountBadge" class="text-[10px] text-slate-400 font-mono font-bold">Verified Market Catalysts</span>
+            <button onclick="fetchRealFinancialNews()" class="text-[9px] text-[#00d09c] font-mono hover:underline flex items-center font-bold"><i class="fa-solid fa-rotate mr-1"></i> Refresh Wire</button>
+        </div>
+        <div id="newsFeedList" class="space-y-2.5"></div>
+    </div>
+</main>
+
+<!-- ১২. ট্যাব ৩: মার্কেট এআই গার্ডিয়ান চ্যাটবট -->
+<main id="tabContentAi" class="tab-page hidden p-3 flex flex-col h-[78vh] max-w-md mx-auto w-full text-xs">  
+    <div class="groww-card p-2.5 mb-2 flex items-center justify-between shadow-md">  
+        <div class="flex items-center space-x-2">  
+            <div class="w-7 h-7 rounded-lg bg-[#00d09c]/10 border border-[#00d09c]/30 flex items-center justify-center text-[#00d09c] text-xs"><i class="fa-solid fa-brain"></i></div>  
+            <div><h3 class="text-xs font-bold text-white heading-font">ARAF Market Intelligence AI</h3><p class="text-[9px] text-[#eb5b3c] font-mono font-medium">Strict Guardian & Capital Protector</p></div>  
+        </div>  
+        <span class="text-[9px] px-2 py-0.5 rounded bg-[#00d09c]/10 text-[#00d09c] border border-[#00d09c]/30 mono-font font-bold">ONLINE</span>  
+    </div>  
+
+    <div id="aiChatBox" class="flex-1 overflow-y-auto space-y-2.5 p-2.5 bg-[#121824] rounded-2xl border border-[#232d3f] text-xs scrollbar-hidden">  
+        <div class="bg-[#18202e] border border-[#232d3f] text-slate-200 p-3 rounded-2xl rounded-tl-none max-w-[90%] space-y-1.5 shadow-md">  
+            <div class="flex items-center space-x-1.5 text-[#00d09c] font-bold text-[11px]"><i class="fa-solid fa-shield-halved text-[#eb5b3c]"></i> <span>ARAF GUARDIAN BOT</span></div>  
+            <p class="text-slate-300 text-[11px] leading-relaxed font-sans">আমি অনলাইনে আছি এবং আপনার ক্যাপিটাল রক্ষা করতে প্রস্তুত। বাংলা, হিন্দি বা ইংরেজিতে যেকোনো চার্ট, লেভেল বা রিস্ক সম্পর্কে সরাসরি প্রশ্ন করুন। কোনো FOMO বা রিভেঞ্জ ট্রেডিং চলবে না!</p>  
+        </div>  
+    </div>  
+
+    <div class="py-2 flex space-x-1.5 overflow-x-auto scrollbar-hidden text-[10px]">  
+        <button onclick="askAiQuick('Is there any trap running on Nifty 50 right now?')" class="px-2.5 py-1 rounded-full bg-[#18202e] border border-[#232d3f] text-slate-300 whitespace-nowrap active:scale-95 transition shadow-sm font-medium">🚨 Nifty Trap Check?</button>  
+        <button onclick="askAiQuick('Verify Reliance orderbook delta and entry levels')" class="px-2.5 py-1 rounded-full bg-[#18202e] border border-[#232d3f] text-slate-300 whitespace-nowrap active:scale-95 transition shadow-sm font-medium">🎯 Reliance Entry Plan?</button>  
+        <button onclick="askAiQuick('What is the golden rule to protect capital from blowout?')" class="px-2.5 py-1 rounded-full bg-[#18202e] border border-[#232d3f] text-slate-300 whitespace-nowrap active:scale-95 transition shadow-sm font-medium">🛡️ Capital Rules?</button>  
+    </div>  
+
+    <div class="flex items-center space-x-2 pt-1">  
+        <input type="text" id="aiInput" onkeydown="if(event.key === 'Enter') sendAiMessage()" placeholder="Ask about charts, levels, or risk check..." class="flex-1 bg-[#18202e] border border-[#232d3f] rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#00d09c] shadow-inner">  
+        <button onclick="sendAiMessage()" id="aiSendBtn" class="w-9 h-9 rounded-xl groww-btn-green flex items-center justify-center font-bold active:scale-95 transition shadow-lg"><i class="fa-solid fa-paper-plane text-xs"></i></button>  
+    </div>  
+</main>
+
+<!-- ১৩. ট্যাব ৪: IPO হাব -->
+<main id="tabContentIpo" class="tab-page hidden p-3 space-y-3.5 max-w-md mx-auto w-full text-xs">
+    <div class="groww-card p-4 shadow-md space-y-2">
+        <div class="flex items-center justify-between"><h3 class="text-xs font-black text-white flex items-center heading-font"><i class="fa-solid fa-rocket text-amber-400 mr-2"></i> Real-Time IPO Hub & Live GMP</h3><span class="text-[8px] bg-amber-500/10 text-amber-400 font-mono px-2 py-0.5 rounded font-bold border border-amber-500/30">BSE / NSE RADAR</span></div>
+        <p class="text-[10px] text-slate-400 leading-snug">Multi-source tracking of mainboard & SME public issues with grey market premium (GMP).</p>
+    </div>
+    <div class="flex space-x-1.5 font-mono text-[10px] font-bold">
+        <button onclick="filterIpoType('all')" id="ipoFilter_all" class="px-3 py-1 rounded-xl bg-[#00d09c] text-slate-950 font-black shadow-md">All IPOs</button>
+        <button onclick="filterIpoType('mainboard')" id="ipoFilter_mainboard" class="px-3 py-1 rounded-xl bg-[#18202e] border border-[#232d3f] text-slate-400">Mainboard</button>
+        <button onclick="filterIpoType('sme')" id="ipoFilter_sme" class="px-3 py-1 rounded-xl bg-[#18202e] border border-[#232d3f] text-slate-400">SME</button>
+    </div>
+    <div id="ipoFeedContainer" class="space-y-2.5"></div>
+</main>
+
+<!-- ১৪. ট্যাব ৫: পোর্টফোলিও ও ট্রেড ডেস্ক -->
+<main id="tabContentTrade" class="tab-page hidden p-3 space-y-3.5 max-w-md mx-auto w-full text-xs">
+    <div class="groww-card p-4 shadow-md space-y-3">
+        <div class="flex items-center justify-between border-b border-[#232d3f] pb-2.5">
+            <div><span class="text-[9px] text-slate-400 uppercase font-mono font-bold tracking-wider">Shoonya Limits</span><h2 id="hudShoonyaBalance" class="text-xl font-black text-[#00d09c] mono-font mt-0.5">₹0.00</h2></div>
+            <div class="text-right"><span class="text-[9px] text-slate-400 uppercase font-mono font-bold tracking-wider">CoinDCX Wallet</span><div id="hudCoinDcxBalance" class="text-xs font-black mono-font text-amber-400 mt-0.5">Active / Linked</div></div>
+        </div>
+        <div class="grid grid-cols-2 gap-2 text-[10px] mono-font pt-1">
+            <div class="bg-[#121824] p-2 rounded-xl border border-[#232d3f]"><span class="text-slate-400 text-[8px] block font-bold">Total Margin Used</span><span id="hudShoonyaMarginUsed" class="text-white font-black">₹0.00</span></div>
+            <div class="bg-[#121824] p-2 rounded-xl border border-[#232d3f]"><span class="text-slate-400 text-[8px] block font-bold">Live Day MTM (INR)</span><span id="hudLiveMtmVal" class="text-[#00d09c] font-black">₹0.00</span></div>
+        </div>
+        <button onclick="resetDailyKillSwitchManual()" class="w-full bg-[#1e2738] hover:bg-[#28354c] border border-[#2b394f] text-slate-200 font-bold py-1.5 rounded-xl text-[10px] transition active:scale-95 flex items-center justify-center space-x-1"><i class="fa-solid fa-arrows-rotate text-[#00d09c] mr-1"></i> <span>Sync Positions & Verify Risk Guard</span></button>
+    </div>
+
+    <!-- অপশন গ্রিকস -->
+    <div class="groww-card p-3.5 space-y-2.5 shadow-md">
+        <div class="flex items-center justify-between"><h3 class="text-xs font-black text-white flex items-center heading-font"><i class="fa-solid fa-chart-pie text-[#00d09c] mr-2"></i> Live Option Greeks (Real Black-Scholes)</h3><div class="flex items-center space-x-1"><button onclick="toggleOptionGreekMode('CE')" id="btnGreeksCe" class="text-[8px] font-mono font-bold px-2 py-0.5 rounded bg-[#00d09c] text-slate-950 font-black shadow-sm">CE</button><button onclick="toggleOptionGreekMode('PE')" id="btnGreeksPe" class="text-[8px] font-mono font-bold px-2 py-0.5 rounded bg-[#1e2738] text-slate-400">PE</button></div></div>
+        <div class="grid grid-cols-4 gap-1.5 text-center mono-font text-[10px]">
+            <div class="bg-[#121824] p-2 rounded-xl border border-[#232d3f]"><span class="text-slate-400 text-[8px] block font-sans font-bold">Delta (Δ)</span><span id="greekDelta" class="text-[#00d09c] font-black">+0.50</span></div>
+            <div class="bg-[#121824] p-2 rounded-xl border border-[#232d3f]"><span class="text-slate-400 text-[8px] block font-sans font-bold">Gamma (Γ)</span><span id="greekGamma" class="text-white font-black">0.0012</span></div>
+            <div class="bg-[#121824] p-2 rounded-xl border border-[#232d3f]"><span class="text-slate-400 text-[8px] block font-sans font-bold">Theta (Θ)</span><span id="greekTheta" class="text-[#eb5b3c] font-black">-12.40</span></div>
+            <div class="bg-[#121824] p-2 rounded-xl border border-[#232d3f]"><span class="text-slate-400 text-[8px] block font-sans font-bold">Vega (ν)</span><span id="greekVega" class="text-blue-400 font-black">+18.50</span></div>
+        </div>
+    </div>
+
+    <!-- ১-ক্লিক ট্রেড ডেস্ক -->
+    <div class="groww-card p-3.5 shadow-md space-y-3">
+        <div class="flex items-center justify-between"><h3 class="text-xs font-black text-white flex items-center heading-font"><i class="fa-solid fa-bolt-lightning text-amber-400 mr-2"></i> 1-Click Execution Desk</h3><span id="orderRoutingBadge" class="text-[9px] bg-[#00d09c]/10 text-[#00d09c] font-mono font-bold px-2 py-0.5 rounded border border-[#00d09c]/30">BROKER READY</span></div>
+        <div class="grid grid-cols-2 gap-2">
+            <div>
+                <label class="text-[9px] font-bold text-slate-400 block mb-1">Asset Symbol</label>
+                <select id="tradeOrderSymbol" onchange="handleOrderSymbolChange()" class="w-full bg-[#121824] border border-[#232d3f] rounded-xl px-2.5 py-2 font-bold text-white text-xs focus:outline-none">
+                    <option value="NIFTY">NIFTY 50 Fut (NSE)</option><option value="BANKNIFTY">BANK NIFTY Fut (NSE)</option><option value="RELIANCE">RELIANCE Cash (NSE)</option><option value="BTCUSDT">BTC/USDT (Crypto)</option><option value="ETHUSDT">ETH/USDT (Crypto)</option><option value="PAXGUSDT">PAXG/USDT (Gold)</option>
+                </select>
+            </div>
+            <div>
+                <label class="text-[9px] font-bold text-slate-400 block mb-1">Quantity / Lot</label>
+                <input type="number" id="tradeOrderQty" oninput="updateCryptoMarginCalculation()" value="25" step="any" min="0.0001" class="w-full bg-[#121824] border border-[#232d3f] rounded-xl px-2.5 py-2 text-xs font-bold text-white mono-font focus:outline-none">
+            </div>
+        </div>
+
+        <div id="cryptoLeverageControlBox" class="hidden space-y-2.5 pt-2 border-t border-[#232d3f]">
+            <div>
+                <div class="flex items-center justify-between mb-1"><label class="text-[9px] font-bold text-slate-400">Select Leverage (CoinDCX Futures)</label><span id="activeLeverageDisplay" class="text-[9px] font-black text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">20X LEVERAGE</span></div>
+                <div class="grid grid-cols-5 gap-1.5 font-mono text-[10px] font-bold" id="cryptoLeveragePillGroup">
+                    <button type="button" onclick="setCryptoLeverage(1)" id="btnLev_1" class="py-1.5 rounded-lg bg-[#121824] text-slate-400 border border-[#232d3f] active:scale-95 transition">1x</button>
+                    <button type="button" onclick="setCryptoLeverage(2)" id="btnLev_2" class="py-1.5 rounded-lg bg-[#121824] text-slate-400 border border-[#232d3f] active:scale-95 transition">2x</button>
+                    <button type="button" onclick="setCryptoLeverage(5)" id="btnLev_5" class="py-1.5 rounded-lg bg-[#121824] text-slate-400 border border-[#232d3f] active:scale-95 transition">5x</button>
+                    <button type="button" onclick="setCryptoLeverage(10)" id="btnLev_10" class="py-1.5 rounded-lg bg-[#121824] text-slate-400 border border-[#232d3f] active:scale-95 transition">10x</button>
+                    <button type="button" onclick="setCryptoLeverage(20)" id="btnLev_20" class="py-1.5 rounded-lg bg-amber-500 text-slate-950 font-black shadow-sm active:scale-95 transition">20x</button>
+                </div>
+                <div class="flex items-center space-x-2 mt-2 pt-1 border-t border-[#232d3f]"><span class="text-[9px] font-bold text-slate-400 font-mono">Custom Leverage:</span><input type="number" id="customLeverageInput" min="1" max="100" value="20" oninput="setCryptoLeverage(parseInt(this.value) || 1)" class="w-16 bg-[#121824] border border-[#232d3f] rounded-lg px-2 py-1 text-center font-bold text-amber-400 text-xs focus:outline-none"><span class="text-xs text-amber-500 font-bold font-mono">X (Max 100x)</span></div>
+            </div>
+            <div class="bg-[#121824] border border-[#232d3f] rounded-xl p-2.5 space-y-1.5 mono-font text-[9.5px]">
+                <div class="flex items-center justify-between text-slate-400"><span>Position Value:</span><b id="calcPositionValue" class="text-white font-bold">$0.00 USDT</b></div>
+                <div class="flex items-center justify-between text-[#00d09c]"><span>Required Margin:</span><b id="calcRequiredMargin" class="text-[#00d09c] text-[11px] font-black">$0.00 USDT</b></div>
+                <div class="flex items-center justify-between text-slate-400 text-[8.5px] pt-1.5 border-t border-[#232d3f]"><span>Est. Liquidation Price: <b id="calcEstLiqPrice" class="text-[#eb5b3c] font-black">$0.00</b></span><span id="calcMarginSufficiency" class="text-[#00d09c] font-bold"><i class="fa-solid fa-circle-check"></i> Margin OK</span></div>
+            </div>
+        </div>
+
+        <div id="orderStatusMsg" class="hidden p-2 rounded-xl text-[10px] mono-font font-bold"></div>
+        <div class="grid grid-cols-2 gap-2 pt-1">
+            <button onclick="dispatchLiveBrokerTrade('BUY')" id="btnLiveBuy" class="py-2.5 rounded-xl groww-btn-green text-xs shadow-lg active:scale-95 transition flex items-center justify-center space-x-1"><i class="fa-solid fa-arrow-trend-up mr-1"></i> <span>Live BUY Order</span></button>
+            <button onclick="dispatchLiveBrokerTrade('SELL')" id="btnLiveSell" class="py-2.5 rounded-xl bg-[#eb5b3c] hover:bg-[#ff6847] text-white font-black text-xs shadow-lg active:scale-95 transition flex items-center justify-center space-x-1"><i class="fa-solid fa-arrow-trend-down mr-1"></i> <span>Live SELL Order</span></button>
+        </div>
+    </div>
+
+    <div class="groww-card p-3.5 shadow-md space-y-2">
+        <div class="flex items-center justify-between pb-1.5 border-b border-[#232d3f]"><h4 class="text-xs font-black text-white flex items-center heading-font"><i class="fa-solid fa-clock-rotate-left text-[#00d09c] mr-1.5"></i> Execution Log</h4><span class="text-[8px] bg-[#00d09c]/10 text-[#00d09c] font-mono font-bold px-1.5 py-0.5 rounded border border-[#00d09c]/30">REAL LOG</span></div>
+        <div id="recentTradesList" class="space-y-1.5"><p class="text-[9px] text-slate-500 font-mono text-center py-2">No executions recorded in this session.</p></div>
+    </div>
+</main>  
+
+<!-- ১৫. ট্যাব ৬: সেটিংস ও অফিসিয়াল কন্টাক্ট ডেক (PIN: 743438) -->
+<main id="tabContentSettings" class="tab-page hidden p-3 space-y-3.5 max-w-md mx-auto w-full text-xs">  
+    <div class="groww-card p-4 space-y-3.5 shadow-md">  
+        <div class="flex items-center justify-between border-b border-[#232d3f] pb-2">
+            <h3 class="text-xs font-black text-white flex items-center tracking-wide uppercase heading-font"><i class="fa-solid fa-sliders text-[#00d09c] mr-2"></i> Settings & Cloud Vault</h3>  
+            <span class="text-[8px] bg-[#00d09c]/20 text-[#00d09c] px-2 py-0.5 rounded-full font-mono font-bold">100% PERSISTENT</span>
+        </div>
+
+        <div class="bg-[#121824] border border-[#232d3f] p-3.5 rounded-xl space-y-3">
+            <div class="flex items-center justify-between">
+                <div><span class="font-bold text-white text-[11px] block">AI Voice Alert Engine</span><span class="text-[8px] text-slate-400 font-mono font-bold">Ultra Pro Max 220ms Anti-Lag</span></div>
+                <button onclick="toggleVoiceAlertState()" id="btnVoiceSettingToggle" class="px-3 py-1.5 rounded-xl bg-[#00d09c] text-slate-950 font-black text-[10px] transition active:scale-95 shadow-md">VOICE ALERTS: ON</button>
+            </div>
+            <div class="grid grid-cols-2 gap-2 pt-1 border-t border-[#232d3f]">
+                <div><label class="text-[9px] font-bold text-slate-400 block mb-1">Language</label><select id="settingVoiceLanguage" onchange="changeVoiceLanguage(this.value)" class="w-full bg-[#18202e] border border-[#232d3f] text-white text-[10px] font-bold rounded-lg p-2 focus:outline-none"><option value="en-US" selected>🇬🇧 English</option><option value="bn-IN">🇧🇩 বাংলা</option><option value="hi-IN">🇮🇳 हिन्दी</option><option value="gu-IN">🇮🇳 ગુજરાતી</option><option value="mr-IN">🇮🇳 मराठी</option><option value="ta-IN">🇮🇳 தமிழ்</option></select></div>
+                <div><label class="text-[9px] font-bold text-slate-400 block mb-1">Interval</label><select id="voiceIntervalSelect" onchange="changeVoiceInterval(this.value)" class="w-full bg-[#18202e] border border-[#232d3f] text-white text-[10px] font-bold rounded-lg p-2 focus:outline-none"><option value="1">1 Min</option><option value="3" selected>3 Min</option><option value="5">5 Min</option><option value="0">🔇 Mute</option></select></div>
+            </div>
+        </div>
+
+        <div class="bg-gradient-to-r from-[#00d09c]/10 to-teal-500/10 p-3 rounded-xl border border-[#00d09c]/20 flex items-center justify-between">  
+            <div><span class="font-bold text-white text-[11px] block">📲 Install Terminal App</span><span class="text-[9px] text-[#00d09c] font-medium">Add to home screen with native icon</span></div>  
+            <button onclick="installPwaApp()" class="groww-btn-green px-3 py-1.5 rounded-lg text-xs active:scale-95 transition shadow-md">Install</button>  
+        </div>
+
+        <div class="bg-[#121824] border border-[#232d3f] p-3.5 rounded-xl space-y-2">
+            <div class="flex items-center justify-between"><span class="font-bold text-white text-[11px] block">Shoonya Production Vault</span><span class="text-[8px] bg-[#00d09c]/20 text-[#00d09c] px-1.5 py-0.2 rounded font-mono font-bold border border-[#00d09c]/30">SECURE</span></div>
+            <input type="text" id="settingShoonyaUid" placeholder="Shoonya User ID" class="w-full bg-[#18202e] border border-[#232d3f] rounded-lg p-2 text-xs text-white focus:outline-none">
+            <input type="password" id="settingShoonyaToken" placeholder="Daily susertoken" class="w-full bg-[#18202e] border border-[#232d3f] rounded-lg p-2 text-xs text-white focus:outline-none">
+            <button onclick="saveShoonyaVaultToRamAndCloud()" class="w-full groww-btn-green py-2 rounded-lg text-[10px] transition active:scale-95 shadow-md">Save & Sync Shoonya</button>
+        </div>
+
+        <div class="bg-[#121824] border border-[#232d3f] p-3.5 rounded-xl space-y-2">
+            <div class="flex items-center justify-between"><span class="font-bold text-white text-[11px] block">CoinDCX Production Vault</span><span class="text-[8px] bg-amber-500/20 text-amber-400 px-1.5 py-0.2 rounded font-mono font-bold border border-amber-500/30">SECURE</span></div>
+            <input type="text" id="settingCoinDcxKey" placeholder="CoinDCX API Key" class="w-full bg-[#18202e] border border-[#232d3f] rounded-lg p-2 text-xs text-white focus:outline-none">
+            <input type="password" id="settingCoinDcxSecret" placeholder="CoinDCX API Secret" class="w-full bg-[#18202e] border border-[#232d3f] rounded-lg p-2 text-xs text-white focus:outline-none">
+            <button onclick="saveCoinDcxVaultToRamAndCloud()" class="w-full bg-[#1e2738] hover:bg-[#28354c] border border-[#2b394f] text-white font-bold py-2 rounded-lg text-[10px] transition active:scale-95 shadow-md">Save & Sync CoinDCX</button>
+        </div>
+
+        <div class="bg-[#121824] border border-[#232d3f] p-4 rounded-2xl space-y-3 shadow-md">
+            <div class="flex items-center justify-between border-b border-[#232d3f] pb-2.5">
+                <div class="flex items-center space-x-2.5"><div class="w-8 h-8 rounded-xl bg-[#00d09c]/10 text-[#00d09c] flex items-center justify-center text-xs font-bold border border-[#00d09c]/30"><i class="fa-solid fa-building-shield"></i></div><div><span class="text-[8.5px] bg-[#00d09c] text-slate-950 font-mono font-black px-1.5 py-0.2 rounded uppercase">ENTERPRISE</span><h4 class="text-xs font-black text-white leading-tight mt-0.5 heading-font">ARAF DIGITAL CENTER</h4></div></div>
+                <span class="text-[9px] text-slate-400 font-mono font-bold">HQ India</span>
+            </div>
+            <div class="flex items-center space-x-3 bg-[#18202e] p-2.5 rounded-xl border border-[#232d3f]">
+                <img src="https://i.ibb.co/WvKJbzb0/file-000000004c2082079db37621e6f181e3.png" alt="Chhabibar Mondal" class="w-12 h-12 rounded-xl object-cover object-top border border-[#00d09c]/40 shadow-sm shrink-0">
+                <div><span class="text-[8.5px] text-[#00d09c] font-mono font-bold uppercase block">Founder & CEO</span><h5 class="text-xs font-black text-white leading-tight heading-font">Chhabibar Mondal</h5><p class="text-[9.5px] text-slate-400 font-sans">Architect • ARAF INTELLIGENCE</p></div>
+            </div>
+            <div class="space-y-2 text-[10px] font-mono">
+                <div class="flex items-center justify-between bg-[#18202e] p-2 rounded-xl border border-[#232d3f]"><span class="text-slate-400 flex items-center font-sans"><i class="fa-solid fa-phone text-[#00d09c] mr-2 text-xs"></i> Mobile</span><div class="flex items-center space-x-2"><a href="tel:+919563075311" class="font-bold text-white hover:text-[#00d09c] transition">+91 9563075311</a><a href="https://wa.me/919563075311?text=Hello%20ARAF%20Support" target="_blank" class="w-5 h-5 bg-[#25D366] text-white rounded-md flex items-center justify-center text-[10px] shadow-sm active:scale-95 transition"><i class="fa-brands fa-whatsapp"></i></a></div></div>
+                <div class="flex items-center justify-between bg-[#18202e] p-2 rounded-xl border border-[#232d3f]"><span class="text-slate-400 flex items-center font-sans"><i class="fa-solid fa-envelope text-blue-400 mr-2 text-xs"></i> Email</span><a href="mailto:Arafdigitalcenter@gmail.com" class="font-bold text-white hover:text-blue-400 transition truncate max-w-[190px]">Arafdigitalcenter@gmail.com</a></div>
+                <div class="bg-[#18202e] p-2.5 rounded-xl border border-[#232d3f] space-y-1"><span class="text-slate-400 flex items-center font-sans text-[9px] font-bold uppercase"><i class="fa-solid fa-location-dot text-[#eb5b3c] mr-1.5 text-xs"></i> Registered Office Address</span><p class="text-[10px] text-slate-300 font-sans leading-relaxed pl-4">Vill + PO: Atghara, PS: Baduria,<br>District: North 24 Parganas, State: West Bengal,<br><b class="text-[#00d09c] font-mono">PIN: 743438</b>, India</p></div>
+            </div>
+        </div>
+
+        <button onclick="handleSessionWipeLogout()" class="w-full bg-[#eb5b3c]/10 border border-[#eb5b3c]/30 text-[#eb5b3c] font-bold py-2.5 rounded-xl text-xs active:scale-95 transition"><i class="fa-solid fa-arrow-right-from-bracket mr-1"></i> Wipe Session & Logout</button>
+    </div>  
+</main>  
+
+<!-- ১৬. ফুটার নেভিগেশন বার -->
+<nav class="fixed bottom-0 left-0 right-0 z-30 bg-[#10141e]/95 backdrop-blur-2xl border-t border-[#1e2638] py-2 shadow-2xl">  
+    <div class="max-w-md mx-auto grid grid-cols-6 text-center">  
+        <button onclick="switchTab('Home')" id="navBtnHome" class="flex flex-col items-center justify-center text-[#00d09c] font-bold"><i class="fa-solid fa-chart-line text-sm"></i><span class="text-[7.5px] font-black mt-1">Terminal</span></button>  
+        <button onclick="switchTab('NewsAi')" id="navBtnNewsAi" class="flex flex-col items-center justify-center text-slate-500"><i class="fa-solid fa-globe text-sm"></i><span class="text-[7.5px] font-bold mt-1">News</span></button>  
+        <button onclick="switchTab('Ai')" id="navBtnAi" class="flex flex-col items-center justify-center text-slate-500"><i class="fa-solid fa-brain text-sm"></i><span class="text-[7.5px] font-bold mt-1">Market AI</span></button>  
+        <button onclick="switchTab('Ipo')" id="navBtnIpo" class="flex flex-col items-center justify-center text-slate-500"><i class="fa-solid fa-rocket text-sm"></i><span class="text-[7.5px] font-bold mt-1">IPO Hub</span></button>  
+        <button onclick="switchTab('Trade')" id="navBtnTrade" class="flex flex-col items-center justify-center text-slate-500"><i class="fa-solid fa-wallet text-sm"></i><span class="text-[7.5px] font-bold mt-1">Portfolio</span></button>  
+        <button onclick="switchTab('Settings')" id="navBtnSettings" class="flex flex-col items-center justify-center text-slate-500"><i class="fa-solid fa-gear text-sm"></i><span class="text-[7.5px] font-bold mt-1">Settings</span></button>  
+    </div>  
+</nav>
+
+<!-- আমাদের প্রধান ট্রেডিং ইঞ্জিন স্ক্রিপ্ট লিঙ্ক -->
+<script src="app.js"></script>
+
+</body>  
+</html>

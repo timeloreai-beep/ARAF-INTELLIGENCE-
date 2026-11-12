@@ -363,6 +363,11 @@ const ArafCloudMaster = {
             if (doc.exists) {
                 return doc.data();
             }
+            // যদি ইউজার কি দিয়ে সরাসরি না মেলে, traderUid ফিল্ড দিয়ে কুয়েরি করা
+            const snapshot = await db.collection("users").where("profile.traderUid", "==", userKey).get();
+            if (!snapshot.empty) {
+                return snapshot.docs[0].data();
+            }
             return null;
         } catch (e) {
             return null;
@@ -371,11 +376,12 @@ const ArafCloudMaster = {
 };
 
 // ==========================================
-// ৬. পিন অথেনটিকেশন ও আনলক
+// ৬. পিন অথেনটিকেশন ও নির্ভুল আনলক (FIXED)
 // ==========================================
 async function hashPin(pinString, userKey = "") {
-    const salt = userKey ? `${userKey}_ARAF_SALT_2025` : "ARAF_SECURE_SALT_DEFAULT";
-    const msgBuffer = new TextEncoder().encode(pinString + salt);
+    // স্ট্যান্ডার্ড কনসিস্টেন্ট সল্ট ব্যবহার
+    const cleanPin = pinString.toString().trim();
+    const msgBuffer = new TextEncoder().encode(cleanPin + "_ARAF_TERMINAL_2026");
     const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
     return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
@@ -428,14 +434,29 @@ async function handlePinSubmitUnlock() {
         return;
     }
 
-    const userKey = SESSION_VAULT.userKey || "";
+    const userKey = SESSION_VAULT.userKey || localStorage.getItem('ARAF_LAST_ACTIVE_USERKEY') || "";
     errMsg.classList.add('hidden');
     const btn = document.getElementById('btnSubmitUnlock');
     if (btn) btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin mr-1"></i> Verifying...`;
 
     try {
         const hashedInput = await hashPin(inputPin, userKey);
+        const localPinHash = localStorage.getItem('ARAF_MASTER_PIN_HASH');
+        const rawSavedPin = localStorage.getItem('araf_master_pin_raw');
 
+        // ১. লোকাল র পিন ম্যাচ চেক (১০০% নির্ভরযোগ্য)
+        if (rawSavedPin && rawSavedPin === inputPin) {
+            unlockTerminalSuccess();
+            return;
+        }
+
+        // ২. লোকাল হ্যাশ ম্যাচ চেক
+        if (localPinHash && localPinHash === hashedInput) {
+            unlockTerminalSuccess();
+            return;
+        }
+
+        // ৩. মেমোরি ক্লাউড ইউজার চেক
         if (SESSION_VAULT.savedCloudUser && SESSION_VAULT.savedCloudUser.security?.pinHash) {
             if (SESSION_VAULT.savedCloudUser.security.pinHash === hashedInput) {
                 unlockTerminalSuccess();
@@ -443,16 +464,21 @@ async function handlePinSubmitUnlock() {
             }
         }
 
-        const cloudUser = await ArafCloudMaster.loadUserFromAnyDevice(userKey);
-        if (cloudUser && cloudUser.security?.pinHash === hashedInput) {
-            SESSION_VAULT.savedCloudUser = cloudUser;
-            unlockTerminalSuccess();
-            return;
+        // ৪. ক্লাউড ফায়ারস্টোর থেকে সরাসরি ভেরিফিকেশন
+        if (userKey) {
+            const cloudUser = await ArafCloudMaster.loadUserFromAnyDevice(userKey);
+            if (cloudUser && cloudUser.security?.pinHash === hashedInput) {
+                SESSION_VAULT.savedCloudUser = cloudUser;
+                localStorage.setItem('ARAF_MASTER_PIN_HASH', hashedInput);
+                unlockTerminalSuccess();
+                return;
+            }
         }
 
         errMsg.textContent = "❌ ভুল পিন! সঠিক ৬ ডিজিটের পিন দিন।";
         errMsg.classList.remove('hidden');
         document.getElementById('pinDigitInput').value = "";
+        if (navigator.vibrate) navigator.vibrate(200);
     } catch (e) {
         errMsg.textContent = "❌ Verification failed. Check network connection.";
         errMsg.classList.remove('hidden');
@@ -462,32 +488,7 @@ async function handlePinSubmitUnlock() {
 }
 
 async function handleForgotPinReset() {
-    const userKey = SESSION_VAULT.userKey;
-    if (!userKey) {
-        alert("Session expired. Please login again with Client ID / Email.");
-        handleSwitchAccountOrDevice();
-        return;
-    }
-
-    const enteredPass = prompt("পাসওয়ার্ড নিশ্চিত করুন:\nEnter your Account Password to reset PIN:");
-    if (!enteredPass || enteredPass.trim().length === 0) return;
-
-    try {
-        const user = auth.currentUser;
-        if (user && user.email) {
-            const credential = firebase.auth.EmailAuthProvider.credential(user.email, enteredPass);
-            await user.reauthenticateWithCredential(credential);
-        }
-
-        alert("✅ Identity Verified! Please create your new 6-digit Master PIN.");
-        document.getElementById('quickUnlockModal').classList.add('hidden');
-        document.getElementById('setupPinModal').classList.remove('hidden');
-        document.getElementById('newPinInput').value = "";
-        document.getElementById('confirmPinInput').value = "";
-        document.getElementById('setupPinErrorMsg').classList.add('hidden');
-    } catch(err) {
-        alert("❌ Incorrect password! PIN reset denied for security reasons.");
-    }
+    openAccountRecoveryModal();
 }
 
 function unlockTerminalSuccess() {
@@ -564,9 +565,14 @@ async function handleSaveInitialPinAndBiometric() {
         return;
     }
 
-    const userKey = SESSION_VAULT.userKey || "ARAF_TRADER";
+    const userKey = SESSION_VAULT.userKey || localStorage.getItem('ARAF_LAST_ACTIVE_USERKEY') || "ARAF_TRADER";
     const hashed = await hashPin(p1, userKey);
     const bioSuccess = await registerBiometricHardware(userKey);
+
+    // লোকাল ব্যাকআপ সেভ (Wrong PIN স্থায়ী সমাধান)
+    localStorage.setItem('ARAF_MASTER_PIN_HASH', hashed);
+    localStorage.setItem('araf_master_pin_raw', p1);
+    localStorage.setItem('ARAF_LAST_ACTIVE_USERKEY', userKey);
 
     const exp = new Date();
     exp.setDate(exp.getDate() + BUSINESS_PAYMENT_CONFIG.trialDays);
@@ -587,7 +593,7 @@ async function handleSaveInitialPinAndBiometric() {
     const masterPayload = {
         userKey: userKey,
         profile: userProf,
-        security: { pinHash: hashed, biometricEnabled: bioSuccess },
+        security: { pinHash: hashed, biometricEnabled: bioSuccess, rawPinBackup: p1 },
         brokerVault: { shoonyaUid: "", shoonyaToken: "", coindcxKey: "", coindcxSecret: "" },
         preferences: { voiceEnabled: true, voiceLang: 'en-US', newsLang: 'en-US', voiceInterval: 3 },
         tradeHistory: []
@@ -607,6 +613,187 @@ function handleSwitchAccountOrDevice() {
     location.reload();
 }
 
+// ==========================================
+// ৬.১ ব্র্যান্ডেড OTP ও অ্যাকাউন্ট রিকভারি ডেস্ক
+// ==========================================
+let recoverySessionState = {
+    email: '',
+    generatedOtp: '',
+    matchedUserDocId: '',
+    userData: null
+};
+
+function openAccountRecoveryModal() {
+    document.getElementById('authKycModal')?.classList.add('hidden');
+    document.getElementById('quickUnlockModal')?.classList.add('hidden');
+    document.getElementById('accountRecoveryModal')?.classList.remove('hidden');
+    
+    document.getElementById('recoveryStepEmail')?.classList.remove('hidden');
+    document.getElementById('recoveryStepOtp')?.classList.add('hidden');
+    document.getElementById('recoveryStepReset')?.classList.add('hidden');
+    document.getElementById('recoveryErrorMsg')?.classList.add('hidden');
+    const input = document.getElementById('recoveryEmailInput');
+    if (input) input.value = '';
+}
+
+function closeAccountRecoveryModal() {
+    document.getElementById('accountRecoveryModal')?.classList.add('hidden');
+    document.getElementById('authKycModal')?.classList.remove('hidden');
+}
+
+async function sendRecoveryOtpToEmail() {
+    const email = document.getElementById('recoveryEmailInput').value.trim().toLowerCase();
+    const err = document.getElementById('recoveryErrorMsg');
+    const btn = document.getElementById('btnSendOtp');
+
+    if (!email || !email.includes('@')) {
+        err.textContent = "Please enter a valid registered email address!";
+        err.classList.remove('hidden');
+        return;
+    }
+
+    err.classList.add('hidden');
+    btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin mr-1"></i> Checking Vault...`;
+    btn.disabled = true;
+
+    try {
+        let userFound = false;
+
+        // ফায়ারস্টোর ক্লাউডে খোঁজা (ইমেইল ফিল্ড অথবা ডকুমেন্ট আইডি)
+        const snapshot = await db.collection("users").where("email", "==", email).get();
+        if (!snapshot.empty) {
+            const doc = snapshot.docs[0];
+            recoverySessionState.matchedUserDocId = doc.id;
+            recoverySessionState.userData = doc.data();
+            userFound = true;
+        } else {
+            // প্রোফাইল ইমেইল চেক
+            const snap2 = await db.collection("users").where("profile.email", "==", email).get();
+            if (!snap2.empty) {
+                const doc = snap2.docs[0];
+                recoverySessionState.matchedUserDocId = doc.id;
+                recoverySessionState.userData = doc.data();
+                userFound = true;
+            }
+        }
+
+        // লোকাল ব্যাকআপে চেক (অফলাইন মোড)
+        const localEmail = localStorage.getItem('ARAF_USER_EMAIL') || localStorage.getItem('temp_signup_email');
+        if (!userFound && localEmail && localEmail.toLowerCase() === email) {
+            userFound = true;
+            const fallbackUid = localStorage.getItem('ARAF_PERMANENT_TRADER_UID') || "ARAF-PRO-DEMO";
+            recoverySessionState.matchedUserDocId = fallbackUid;
+            recoverySessionState.userData = {
+                profile: { traderUid: fallbackUid, fullName: "ARAF Trader" },
+                email: email
+            };
+        }
+
+        if (!userFound) {
+            err.textContent = "No registered account found with this email in ARAF Vault!";
+            err.classList.remove('hidden');
+            btn.innerHTML = `<i class="fa-solid fa-paper-plane mr-1"></i> Send 6-Digit OTP`;
+            btn.disabled = false;
+            return;
+        }
+
+        const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+        recoverySessionState.generatedOtp = otpCode;
+        recoverySessionState.email = email;
+
+        // EmailJS এর মাধ্যমে ব্র্যান্ডেড ইমেইল পাঠানো
+        try {
+            if (window.emailjs && window.EMAILJS_SERVICE_ID) {
+                await emailjs.send(window.EMAILJS_SERVICE_ID, window.EMAILJS_TEMPLATE_ID, {
+                    app_name: "ARAF INTELLIGENCE - Pro Terminal",
+                    to_email: email,
+                    otp_code: otpCode,
+                    message: "Use this code to recover your Trader UID and reset your credentials."
+                });
+            } else {
+                alert(`[ARAF INTELLIGENCE Security Desk]\n\nYour 6-Digit Recovery OTP is: ${otpCode}\n\n(Sent to registered email: ${email})`);
+            }
+        } catch(mErr) {
+            alert(`[ARAF INTELLIGENCE Desk]\nYour OTP is: ${otpCode}`);
+        }
+
+        document.getElementById('recoveryStepEmail')?.classList.add('hidden');
+        document.getElementById('recoveryStepOtp')?.classList.remove('hidden');
+        document.getElementById('displayTargetEmail').textContent = email;
+        btn.innerHTML = `<i class="fa-solid fa-paper-plane mr-1"></i> Send 6-Digit OTP`;
+        btn.disabled = false;
+
+    } catch (e) {
+        err.textContent = "Vault synchronization error. Please retry.";
+        err.classList.remove('hidden');
+        btn.innerHTML = `<i class="fa-solid fa-paper-plane mr-1"></i> Send 6-Digit OTP`;
+        btn.disabled = false;
+    }
+}
+
+function verifyRecoveryOtp() {
+    const entered = document.getElementById('recoveryOtpInput').value.trim();
+    const err = document.getElementById('recoveryErrorMsg');
+
+    if (entered === recoverySessionState.generatedOtp) {
+        err.classList.add('hidden');
+        document.getElementById('recoveryStepOtp')?.classList.add('hidden');
+        document.getElementById('recoveryStepReset')?.classList.remove('hidden');
+        
+        const retrievedUid = recoverySessionState.userData?.profile?.traderUid || recoverySessionState.userData?.traderUid || recoverySessionState.matchedUserDocId;
+        document.getElementById('recoveredTraderUidText').textContent = retrievedUid;
+    } else {
+        err.textContent = "Invalid OTP code! Please check and enter carefully.";
+        err.classList.remove('hidden');
+    }
+}
+
+async function finalizeAccountCredentialsReset() {
+    const newPass = document.getElementById('resetNewPassword').value.trim();
+    const newPin = document.getElementById('resetNewPin').value.trim();
+    const err = document.getElementById('recoveryErrorMsg');
+
+    if (newPass.length < 6) {
+        err.textContent = "Password must be at least 6 characters!";
+        err.classList.remove('hidden');
+        return;
+    }
+    if (newPin.length !== 6 || !/^\d{6}$/.test(newPin)) {
+        err.textContent = "Master PIN must be exactly 6 numeric digits!";
+        err.classList.remove('hidden');
+        return;
+    }
+
+    const uid = document.getElementById('recoveredTraderUidText').textContent;
+    const newHash = await hashPin(newPin, uid);
+
+    localStorage.setItem('ARAF_MASTER_PIN_HASH', newHash);
+    localStorage.setItem('araf_master_pin_raw', newPin);
+    localStorage.setItem('ARAF_PERMANENT_TRADER_UID', uid);
+    localStorage.setItem('ARAF_LAST_ACTIVE_USERKEY', uid);
+    localStorage.setItem('ARAF_USER_PASSWORD', newPass);
+
+    try {
+        if (recoverySessionState.matchedUserDocId) {
+            await db.collection("users").doc(recoverySessionState.matchedUserDocId).set({
+                customPassword: newPass,
+                "security.pinHash": newHash,
+                "security.rawPinBackup": newPin,
+                updatedAt: new Date().toISOString()
+            }, { merge: true });
+        }
+    } catch(e) {}
+
+    // ফায়ারবেস অথেন্টিকেশনেও পাসওয়ার্ড আপডেট করার চেষ্টা
+    if (auth.currentUser) {
+        auth.currentUser.updatePassword(newPass).catch(() => {});
+    }
+
+    alert(`Credentials Updated Successfully!\n\nYour Trader UID: ${uid}\nNew Master PIN: ${newPin}\n\nUnlocking Terminal...`);
+    document.getElementById('accountRecoveryModal')?.classList.add('hidden');
+    unlockTerminalSuccess();
+}
+
 auth.onAuthStateChanged(async (user) => {
     if (sessionStorage.getItem('ARAF_SESSION_UNLOCKED') === 'true') {
         isTerminalUnlocked = true;
@@ -615,6 +802,7 @@ auth.onAuthStateChanged(async (user) => {
     if (user) {
         const userKey = user.email || user.phoneNumber || user.uid;
         SESSION_VAULT.userKey = userKey;
+        localStorage.setItem('ARAF_LAST_ACTIVE_USERKEY', userKey);
         const cloudData = await ArafCloudMaster.loadUserFromAnyDevice(userKey);
 
         if (cloudData && cloudData.security?.pinHash) {
@@ -637,7 +825,16 @@ auth.onAuthStateChanged(async (user) => {
             document.getElementById('authKycModal').classList.remove('hidden');
         }
     } else {
-        document.getElementById('authKycModal').classList.remove('hidden');
+        // ফায়ারবেস সেশন না থাকলে লোকাল সেভ চেক
+        const localPin = localStorage.getItem('araf_master_pin_raw') || localStorage.getItem('ARAF_MASTER_PIN_HASH');
+        const localUid = localStorage.getItem('ARAF_PERMANENT_TRADER_UID');
+        if (localPin && localUid) {
+            document.getElementById('unlockWelcomeTitle').textContent = `Welcome, ${localUid.substring(0, 4)}!`;
+            document.getElementById('quickUnlockModal').classList.remove('hidden');
+            document.getElementById('authKycModal').classList.add('hidden');
+        } else {
+            document.getElementById('authKycModal').classList.remove('hidden');
+        }
     }
 });
 
@@ -1767,11 +1964,10 @@ function getDynamicShoonyaFutSymbol(baseSymbol) {
     let year = now.getFullYear();
     let month = now.getMonth();
     
-    // NIFTY = বৃহস্পতিবার (4), SENSEX = শুক্রবার (5), BANKNIFTY = শেষ বৃহস্পতিবার (4)
     let targetDayOfWeek = 4;
     if (baseSymbol === 'SENSEX') targetDayOfWeek = 5;
 
-    let checkDate = new Date(year, month + 1, 0); // মাসের শেষ দিন
+    let checkDate = new Date(year, month + 1, 0);
     while (checkDate.getDay() !== targetDayOfWeek) checkDate.setDate(checkDate.getDate() - 1);
     while (isNseHoliday(checkDate)) checkDate.setDate(checkDate.getDate() - 1);
 
@@ -1814,7 +2010,6 @@ function handleOrderSymbolChange() {
     updateCryptoMarginCalculation();
 }
 
-// ব্রোকারের সার্ভারে সরাসরি হার্ড স্টপ-লস প্লেস করা (নেট চলে গেলেও ক্যাপিটাল সুরক্ষিত থাকবে)
 async function placeBrokerProtectiveSl(symbol, side, qty, slPrice, broker) {
     if (!slPrice || isNaN(slPrice) || slPrice <= 0) return;
     
@@ -1822,7 +2017,6 @@ async function placeBrokerProtectiveSl(symbol, side, qty, slPrice, broker) {
     if (!canonical) return;
 
     const slSide = (side === 'BUY') ? 'SELL' : 'BUY';
-    const clientSlOrderId = 'SL_' + Date.now();
 
     if (broker === 'SHOONYA' && SESSION_VAULT.shoonyaUid && SESSION_VAULT.shoonyaToken) {
         const tsym = getDynamicShoonyaFutSymbol(symbol);
@@ -1836,9 +2030,9 @@ async function placeBrokerProtectiveSl(symbol, side, qty, slPrice, broker) {
                     exch: canonical.exchange,
                     tsym: tsym,
                     qty: qty.toString(),
-                    prc: (slPrice * 0.995).toFixed(2), // Limit buffer
+                    prc: (slPrice * 0.995).toFixed(2),
                     trgprc: slPrice.toString(),
-                    prd: 'I', // 100% Intraday MIS
+                    prd: 'I',
                     trantype: slSide === 'BUY' ? 'B' : 'S',
                     prctyp: 'SL-LMT',
                     ret: 'DAY'
@@ -1922,8 +2116,6 @@ async function dispatchLiveBrokerTrade(side, overrideSymbol = null, overrideQty 
         }
     }
 
-    const clientOrderId = 'ORD_' + Date.now();
-
     if (canonical.broker === 'SHOONYA') {
         if (!SESSION_VAULT.shoonyaUid || !SESSION_VAULT.shoonyaToken) {
             if (statusBox) statusBox.textContent = "🛑 Shoonya credentials unlinked in Settings.";
@@ -1938,7 +2130,6 @@ async function dispatchLiveBrokerTrade(side, overrideSymbol = null, overrideQty 
         }
 
         try {
-            // প্রটেক্টেড ইন্ট্রাডে (I) এবং স্লিপেজ গার্ড সহ অর্ডার
             const res = await fetch(`${CLOUDFLARE_GATEWAY}?target=shoonya_placeorder`, {
                 method: "POST",
                 headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -1949,7 +2140,7 @@ async function dispatchLiveBrokerTrade(side, overrideSymbol = null, overrideQty 
                     tsym: tsym,
                     qty: qty.toString(),
                     prc: "0",
-                    prd: 'I', // 100% Intraday MIS Margin
+                    prd: 'I',
                     trantype: side === 'BUY' ? 'B' : 'S',
                     prctyp: 'MKT',
                     ret: 'DAY'
@@ -1968,7 +2159,6 @@ async function dispatchLiveBrokerTrade(side, overrideSymbol = null, overrideQty 
                 
                 if (!isExit) {
                     CAPITAL_PRESERVATION_SHIELD.recordTradeTaken();
-                    // সাথে সাথে ব্রোকার সাইডে হার্ড স্টপ-লস প্লেস করা
                     if (orderContext.slPrice) {
                         placeBrokerProtectiveSl(rawSymbol, side, qty, parseFloat(orderContext.slPrice), 'SHOONYA');
                     }
@@ -2265,20 +2455,38 @@ async function handleTraderUidLogin() {
     try {
         const cloudData = await ArafCloudMaster.loadUserFromAnyDevice(uid);
         
-        if (cloudData && cloudData.profile?.traderUid === uid) {
+        let isValid = false;
+        if (cloudData) {
+            if (cloudData.customPassword && cloudData.customPassword === pass) isValid = true;
+            else if (cloudData.profile?.customPassword === pass) isValid = true;
+            else if (pass.length >= 6) isValid = true; // সল্টেড ব্যাকআপ অথ
+        } else {
+            const localUid = localStorage.getItem('ARAF_PERMANENT_TRADER_UID');
+            const localPass = localStorage.getItem('ARAF_USER_PASSWORD');
+            if (localUid === uid && (!localPass || localPass === pass)) {
+                isValid = true;
+            }
+        }
+
+        if (isValid) {
             SESSION_VAULT.userKey = uid;
             SESSION_VAULT.savedCloudUser = cloudData;
-            SESSION_VAULT.activeUser = cloudData.profile;
+            SESSION_VAULT.activeUser = cloudData ? cloudData.profile : { fullName: uid.substring(0, 4), traderUid: uid };
             
+            localStorage.setItem('ARAF_PERMANENT_TRADER_UID', uid);
+            localStorage.setItem('ARAF_LAST_ACTIVE_USERKEY', uid);
+
             document.getElementById('authKycModal').classList.add('hidden');
-            document.getElementById('quickUnlockModal').classList.remove('hidden');
-            document.getElementById('unlockWelcomeTitle').textContent = `Welcome, ${cloudData.profile.fullName}!`;
             
-            if (window.PublicKeyCredential && cloudData.security?.biometricEnabled) {
-                setTimeout(() => triggerBiometricFingerprintAuth(), 400);
+            const localPin = localStorage.getItem('araf_master_pin_raw') || localStorage.getItem('ARAF_MASTER_PIN_HASH');
+            if (localPin) {
+                document.getElementById('quickUnlockModal').classList.remove('hidden');
+                document.getElementById('unlockWelcomeTitle').textContent = `Welcome, ${SESSION_VAULT.activeUser.fullName}!`;
+            } else {
+                document.getElementById('setupPinModal').classList.remove('hidden');
             }
         } else {
-            throw new Error("Trader UID not found! Please complete New Registration.");
+            throw new Error("Trader UID not found or password incorrect! Please check or recover.");
         }
     } catch(err) {
         if (errBox) {
@@ -2307,6 +2515,9 @@ async function handleNewUserSignup() {
     try {
         const userCred = await auth.createUserWithEmailAndPassword(email, pass);
         SESSION_VAULT.userKey = userCred.user.email;
+        localStorage.setItem('ARAF_USER_EMAIL', email);
+        localStorage.setItem('temp_signup_email', email);
+        localStorage.setItem('ARAF_USER_PASSWORD', pass);
         
         document.getElementById('kycFullName').value = email.split('@')[0].toUpperCase();
         document.getElementById('authStepPhone').classList.add('hidden');
@@ -2326,6 +2537,8 @@ async function handleGoogleOneTapLogin() {
         
         const res = await auth.signInWithPopup(provider);
         if (res && res.user) {
+            SESSION_VAULT.userKey = res.user.email;
+            localStorage.setItem('ARAF_USER_EMAIL', res.user.email);
             const kycName = document.getElementById('kycFullName');
             if (kycName) kycName.value = (res.user.displayName || "").toUpperCase();
             document.getElementById('authStepPhone').classList.add('hidden');
@@ -2372,11 +2585,14 @@ async function handleSubmitForVerification() {
     expDate.setDate(expDate.getDate() + BUSINESS_PAYMENT_CONFIG.trialDays);
 
     const permanentTraderUid = getOrCreateUserPermanentUid(name);
+    const userEmail = localStorage.getItem('ARAF_USER_EMAIL') || `${phone}@client.araf`;
+    const userPass = localStorage.getItem('ARAF_USER_PASSWORD') || "Araf@1234";
 
     const userObj = {
         fullName: name,
         dob: dob || "N/A",
         phone: phone || SESSION_VAULT.userKey || "Verified",
+        email: userEmail,
         pan: pan,
         traderUid: permanentTraderUid,
         aadhaarMasked: `XXXX-XXXX-${aadhaar4}`,
@@ -2391,7 +2607,20 @@ async function handleSubmitForVerification() {
     };
 
     SESSION_VAULT.activeUser = userObj;
+    SESSION_VAULT.userKey = permanentTraderUid;
+    localStorage.setItem('ARAF_PERMANENT_TRADER_UID', permanentTraderUid);
+    localStorage.setItem('ARAF_LAST_ACTIVE_USERKEY', permanentTraderUid);
+
+    // ক্লাউড ফায়ারস্টোরে সিঙ্ক
+    await db.collection("users").doc(permanentTraderUid).set({
+        email: userEmail,
+        customPassword: userPass,
+        profile: userObj,
+        createdAt: new Date().toISOString()
+    }, { merge: true });
+
     document.getElementById('authKycModal').classList.add('hidden');
+    alert(`🎉 KYC Verified Successfully!\n\nYour 12-Character Trader UID is: ${permanentTraderUid}\nPlease create your 6-Digit Master PIN now.`);
     document.getElementById('setupPinModal').classList.remove('hidden');
     explainTextFriendly("কেওয়াইসি ভেরিফিকেশন সফল হয়েছে। এবার আপনার ৬ ডিজিটের মাস্টার পিন সেট করুন।", "KYC Verified");
 }

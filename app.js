@@ -3520,3 +3520,236 @@ async function verifyRecoveryOtp() {
         }
     }
 }
+// ব্যাক এবং ক্লোজ হ্যান্ডলার
+function closeAuthKycModal() {
+    document.getElementById('authKycModal')?.classList.add('hidden');
+}
+
+function dismissQuickUnlockModal() {
+    document.getElementById('quickUnlockModal')?.classList.add('hidden');
+}
+
+function backToSignupEmailStep() {
+    document.getElementById('accountRecoveryModal')?.classList.add('hidden');
+    document.getElementById('authKycModal')?.classList.remove('hidden');
+    switchAuthMode('SIGNUP');
+}
+/* ==========================================================================
+   ARAF INTELLIGENCE - RESEND PRODUCTION EMAIL ENGINE (KEY ACTIVE)
+   ========================================================================== */
+
+const RESEND_API_KEY = "re_jfiYUJh2_9yRaQkKF6U1W4pmTxQE2gQYJ";
+
+// জিমেইলে ব্র্যান্ডেড ওটিপি প্রেরক (CORS-Bypass Supported)
+async function sendEmailViaResend(targetEmail, otpCode) {
+    const emailPayload = {
+        from: "ARAF INTELLIGENCE <onboarding@resend.dev>",
+        to: [targetEmail],
+        subject: `[ARAF INTELLIGENCE] Security Verification OTP: ${otpCode}`,
+        html: `
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #10141e; padding: 25px; color: #ffffff; border-radius: 14px; max-width: 480px; margin: auto; border: 1px solid rgba(0, 208, 156, 0.3); box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <h2 style="color: #00d09c; margin: 0; font-size: 22px; font-weight: 900; letter-spacing: 0.5px;">ARAF <span style="color: #ffffff;">INTELLIGENCE</span></h2>
+                    <p style="color: #94a3b8; font-size: 11px; margin-top: 5px; font-family: monospace;">Institutional Trading Terminal • Security Desk</p>
+                </div>
+                
+                <div style="background-color: #18202e; border: 1px solid #232d3f; padding: 22px; border-radius: 12px; text-align: center;">
+                    <p style="font-size: 13px; color: #cbd5e1; margin: 0 0 15px 0; line-height: 1.5;">Your 6-Digit One-Time Password (OTP) for account verification and access unlock is:</p>
+                    
+                    <div style="font-size: 32px; font-weight: 900; letter-spacing: 8px; color: #00d09c; background-color: #0d121c; padding: 14px 20px; border-radius: 10px; font-family: monospace; border: 1px dashed #00d09c; display: inline-block; box-shadow: inset 0 2px 8px rgba(0,0,0,0.6);">
+                        ${otpCode}
+                    </div>
+                    
+                    <p style="font-size: 11px; color: #94a3b8; margin: 16px 0 0 0;">This OTP is valid for 10 minutes. Never share this code with anyone.</p>
+                </div>
+                
+                <div style="text-align: center; margin-top: 22px; border-top: 1px solid #1e2638; padding-top: 15px;">
+                    <p style="font-size: 10px; color: #64748b; margin: 0; line-height: 1.4;">ARAF DIGITAL CENTER • Founder & CEO: Chhabibar Mondal<br>Registered Office: Vill + PO: Atghara, PS: Baduria, PIN: 743438, India</p>
+                </div>
+            </div>
+        `
+    };
+
+    // ১ম প্রচেষ্টা: সরাসরি Resend API
+    try {
+        const response = await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${RESEND_API_KEY}`
+            },
+            body: JSON.stringify(emailPayload)
+        });
+
+        if (response.ok) {
+            console.log(`[Resend OTP]: Direct email dispatched to ${targetEmail}`);
+            return true;
+        }
+    } catch (directErr) {
+        console.warn("[Resend Direct]: Direct blocked by browser CORS, switching to proxy gateway...");
+    }
+
+    // ২য় প্রচেষ্টা: ক্লাউডফেয়ার প্রক্সি গেটওয়ে
+    try {
+        const proxyUrl = `${CLOUDFLARE_GATEWAY}?target=resend_proxy`;
+        const res = await fetch(proxyUrl, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "x-resend-key": RESEND_API_KEY
+            },
+            body: JSON.stringify(emailPayload)
+        });
+
+        if (res.ok) {
+            console.log(`[Resend Gateway]: Proxy email dispatched to ${targetEmail}`);
+            return true;
+        }
+    } catch (proxyErr) {
+        console.error("[Resend Gateway Error]:", proxyErr);
+    }
+
+    // ব্যাকআপ অ্যালার্ট (যদি নেট সম্পূর্ণ ব্লক থাকে)
+    alert(`[ARAF INTELLIGENCE]\nYour 6-Digit OTP is: ${otpCode}\n(Sent to: ${targetEmail})`);
+    return true;
+}
+
+// সাইনআপ ফ্লোতে Resend ইন্টিগ্রেশন
+async function handleNewUserSignup() {
+    const email = document.getElementById('signupEmailInput')?.value.trim();
+    const pass = document.getElementById('signupPasswordInput')?.value.trim();
+    const confirmPass = document.getElementById('signupConfirmPasswordInput')?.value.trim();
+    const errBox = document.getElementById('authCustomErrorMsg');
+
+    if (errBox) errBox.classList.add('hidden');
+
+    if (!email || !email.includes('@')) {
+        showSignupError("Please enter a valid email address!");
+        return;
+    }
+    if (!pass || pass.length < 6) {
+        showSignupError("Password must be at least 6 characters!");
+        return;
+    }
+    if (confirmPass !== undefined && pass !== confirmPass) {
+        showSignupError("Passwords do not match! Please check.");
+        return;
+    }
+
+    function showSignupError(msg) {
+        if (errBox) {
+            errBox.textContent = "🛑 " + msg;
+            errBox.classList.remove('hidden');
+        }
+    }
+
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    pendingAuthSession.email = email;
+    pendingAuthSession.pass = pass;
+    pendingAuthSession.otp = otpCode;
+    pendingAuthSession.mode = 'SIGNUP';
+
+    const signupBtn = event?.target || document.querySelector('#formNewRegistration button');
+    if (signupBtn) signupBtn.innerHTML = `<i class="fa-solid fa-spinner animate-spin mr-1"></i> Sending OTP to Gmail...`;
+
+    await sendEmailViaResend(email, otpCode);
+
+    if (signupBtn) signupBtn.innerHTML = `<i class="fa-solid fa-user-plus mr-1"></i> <span>Verify Email & Create UID</span>`;
+
+    document.getElementById('authKycModal')?.classList.add('hidden');
+    document.getElementById('quickUnlockModal')?.classList.add('hidden');
+    
+    const recoveryModal = document.getElementById('accountRecoveryModal');
+    if (recoveryModal) {
+        recoveryModal.style.zIndex = "99999";
+        recoveryModal.classList.remove('hidden');
+    }
+
+    document.getElementById('recoveryStepEmail')?.classList.add('hidden');
+    document.getElementById('recoveryStepOtp')?.classList.remove('hidden');
+    document.getElementById('recoveryStepReset')?.classList.add('hidden');
+    
+    const dispEmail = document.getElementById('displayTargetEmail');
+    if (dispEmail) dispEmail.textContent = email;
+
+    const otpInput = document.getElementById('recoveryOtpInput');
+    if (otpInput) {
+        otpInput.value = '';
+        otpInput.focus();
+    }
+}
+
+// রিকভারি ফ্লোতে Resend ইন্টিগ্রেশন
+async function sendRecoveryOtpToEmail() {
+    const email = document.getElementById('recoveryEmailInput')?.value.trim().toLowerCase();
+    const err = document.getElementById('recoveryErrorMsg');
+    const btn = document.getElementById('btnSendOtp');
+
+    if (!email || !email.includes('@')) {
+        err.textContent = "Please enter a valid registered email address!";
+        err.classList.remove('hidden');
+        return;
+    }
+
+    err.classList.add('hidden');
+    btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin mr-1"></i> Verifying Vault...`;
+    btn.disabled = true;
+
+    try {
+        let userFound = false;
+
+        const snapshot = await db.collection("users").where("email", "==", email).get();
+        if (!snapshot.empty) {
+            const doc = snapshot.docs[0];
+            recoverySessionState.matchedUserDocId = doc.id;
+            recoverySessionState.userData = doc.data();
+            userFound = true;
+        } else {
+            const snap2 = await db.collection("users").where("profile.email", "==", email).get();
+            if (!snap2.empty) {
+                const doc = snap2.docs[0];
+                recoverySessionState.matchedUserDocId = doc.id;
+                recoverySessionState.userData = doc.data();
+                userFound = true;
+            }
+        }
+
+        const localEmail = localStorage.getItem('ARAF_USER_EMAIL') || localStorage.getItem('temp_signup_email');
+        if (!userFound && localEmail && localEmail.toLowerCase() === email) {
+            userFound = true;
+            const fallbackUid = localStorage.getItem('ARAF_PERMANENT_TRADER_UID') || "ARAF-PRO-DEMO";
+            recoverySessionState.matchedUserDocId = fallbackUid;
+            recoverySessionState.userData = {
+                profile: { traderUid: fallbackUid, fullName: "ARAF Trader" },
+                email: email
+            };
+        }
+
+        if (!userFound) {
+            err.textContent = "No registered account found with this email in ARAF Vault!";
+            err.classList.remove('hidden');
+            btn.innerHTML = `<i class="fa-solid fa-paper-plane mr-1"></i> Send 6-Digit OTP`;
+            btn.disabled = false;
+            return;
+        }
+
+        const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+        recoverySessionState.generatedOtp = otpCode;
+        recoverySessionState.email = email;
+
+        btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin mr-1"></i> Sending Email...`;
+        await sendEmailViaResend(email, otpCode);
+
+        document.getElementById('recoveryStepEmail')?.classList.add('hidden');
+        document.getElementById('recoveryStepOtp')?.classList.remove('hidden');
+        document.getElementById('displayTargetEmail').textContent = email;
+        btn.innerHTML = `<i class="fa-solid fa-paper-plane mr-1"></i> Send 6-Digit OTP`;
+        btn.disabled = false;
+
+    } catch (e) {
+        err.textContent = "Vault synchronization error. Please retry.";
+        err.classList.remove('hidden');
+        btn.innerHTML = `<i class="fa-solid fa-paper-plane mr-1"></i> Send 6-Digit OTP`;
+        btn.disabled = false;
+    }
+}

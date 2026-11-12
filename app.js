@@ -357,7 +357,7 @@ const ArafCloudMaster = {
 };
 
 // ==========================================
-// ৬. সল্টেড পিন ও সার্ভার-ভেরিফাইড ইঞ্জিন
+// ৬. সল্টেড পিন, সার্ভার ভেরিফিকেশন ও পাসওয়ার্ড রিসেট
 // ==========================================
 async function hashPin(pinString, userKey = "") {
     const salt = userKey ? `${userKey}_ARAF_SALT_2025` : "ARAF_SECURE_SALT_DEFAULT";
@@ -448,6 +448,39 @@ async function handlePinSubmitUnlock() {
         errMsg.classList.remove('hidden');
     } finally {
         if (btn) btn.innerHTML = `<i class="fa-solid fa-lock-open mr-1"></i> <span>Unlock Terminal</span>`;
+    }
+}
+
+// পাসওয়ার্ড দিয়ে পিন রিকভারি ও রিসেট হ্যান্ডলার
+async function handleForgotPinReset() {
+    const userKey = SESSION_VAULT.userKey;
+    if (!userKey) {
+        alert("Session expired. Please login again with Client ID / Email.");
+        handleSwitchAccountOrDevice();
+        return;
+    }
+
+    const enteredPass = prompt("পাসওয়ার্ড নিশ্চিত করুন:\nEnter your Account Password to reset PIN:");
+    if (!enteredPass || enteredPass.trim().length === 0) return;
+
+    try {
+        const user = auth.currentUser;
+        if (user && user.email) {
+            const credential = firebase.auth.EmailAuthProvider.credential(user.email, enteredPass);
+            await user.reauthenticateWithCredential(credential);
+        }
+
+        localStorage.removeItem('ARAF_PIN_FAILED_ATTEMPTS');
+        localStorage.removeItem('ARAF_PIN_LOCKOUT_UNTIL');
+
+        alert("✅ Identity Verified! Please create your new 6-digit Master PIN.");
+        document.getElementById('quickUnlockModal').classList.add('hidden');
+        document.getElementById('setupPinModal').classList.remove('hidden');
+        document.getElementById('newPinInput').value = "";
+        document.getElementById('confirmPinInput').value = "";
+        document.getElementById('setupPinErrorMsg').classList.add('hidden');
+    } catch(err) {
+        alert("❌ Incorrect password! PIN reset denied for security reasons.");
     }
 }
 

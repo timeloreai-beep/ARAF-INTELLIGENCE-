@@ -64,7 +64,7 @@
 
         <!-- পিন রিকভারি বাটন -->
         <button onclick="handleForgotPinReset()" class="text-[10px] text-amber-400 hover:text-amber-300 font-mono underline block mx-auto pt-2 font-bold active:scale-95 transition">
-            <i class="fa-solid fa-key mr-1"></i> Forgot PIN? Reset with Password
+            <i class="fa-solid fa-key mr-1"></i> Forgot PIN? Reset with OTP
         </button>
 
         <button onclick="handleSwitchAccountOrDevice()" class="text-[9px] text-slate-500 hover:text-slate-300 font-mono underline block mx-auto pt-1">Switch User / Login on New Device</button>
@@ -273,8 +273,8 @@
     </div>
 </div>
 
-<!-- ৫.১ অ্যাকাউন্ট ও পাসওয়ার্ড রিকভারি ওটিপি মডাল -->
-<div id="accountRecoveryModal" class="fixed inset-0 z-50 bg-[#0a0d14]/90 backdrop-blur-md flex items-center justify-center p-3 hidden">
+<!-- ৫.১ অ্যাকাউন্ট ও পাসওয়ার্ড রিকভারি ওটিপি মডাল (সর্বোচ্চ z-index) -->
+<div id="accountRecoveryModal" class="fixed inset-0 z-[99999] bg-[#0a0d14]/95 backdrop-blur-md flex items-center justify-center p-3 hidden">
     <div class="groww-card w-full max-w-sm p-5 space-y-4 shadow-2xl relative border border-[#00d09c]/30 opportunity-glow">
         <div class="text-center space-y-1">
             <div class="inline-flex p-2.5 bg-amber-500/10 rounded-2xl border border-amber-500/30 text-amber-400 mb-1">

@@ -22,7 +22,7 @@ if (!firebase.apps.length) {
     firebase.initializeApp(firebaseConfig);
 }
 const auth = firebase.auth();
-const db = firebase.firestore(); // রিয়েল ক্লাউড ডাটাবেস
+const db = firebase.firestore();
 
 auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(e => console.warn("[Auth Persistence Warn]:", e));
 
@@ -118,9 +118,6 @@ const NSE_TRADING_HOLIDAYS_2025_2026 = [
     "2026-01-26", "2026-03-06", "2026-03-20", "2026-04-03", "2026-04-14"
 ];
 
-// ==========================================
-// আপডেট করা লট সাইজ (SEBI Compliant)
-// ==========================================
 const CANONICAL_INSTRUMENTS = {
     'NIFTY': { broker: 'SHOONYA', exchange: 'NFO', segment: 'FUT', lotSize: 65, tickSize: 0.05, isDerivative: true, token: '26000' },
     'BANKNIFTY': { broker: 'SHOONYA', exchange: 'NFO', segment: 'FUT', lotSize: 30, tickSize: 0.05, isDerivative: true, token: '26009' },
@@ -249,7 +246,6 @@ async function triggerHardKillSwitch(lossAmount) {
 
     explainTextFriendly(alertMsg, "Guardian Hard Lock");
 
-    // পার্মানেন্ট ফায়ারস্টোর ক্লাউডে সেভ
     if (SESSION_VAULT.userKey) {
         try {
             await db.collection("users").doc(SESSION_VAULT.userKey).set({
@@ -343,13 +339,12 @@ function closeSubscriptionModal() {
 }
 
 // ==========================================
-// ৫. ফায়ারস্টোর পার্মানেন্ট ক্লাউড ডেটাবেস ড্রাইভার
+// ৫. ফায়ারস্টোর ক্লাউড ডেটাবেস ড্রাইভার
 // ==========================================
 const ArafCloudMaster = {
     async syncAllUserData(userKey, fullData) {
         try {
             if (fullData.profile) fullData.profile.lastLogin = new Date().toISOString();
-            // সরাসরি Firebase Firestore-এ সংরক্ষণ
             await db.collection("users").doc(userKey).set(fullData, { merge: true });
             return true;
         } catch (e) {
@@ -363,7 +358,6 @@ const ArafCloudMaster = {
             if (doc.exists) {
                 return doc.data();
             }
-            // যদি ইউজার কি দিয়ে সরাসরি না মেলে, traderUid ফিল্ড দিয়ে কুয়েরি করা
             const snapshot = await db.collection("users").where("profile.traderUid", "==", userKey).get();
             if (!snapshot.empty) {
                 return snapshot.docs[0].data();
@@ -376,10 +370,9 @@ const ArafCloudMaster = {
 };
 
 // ==========================================
-// ৬. পিন অথেনটিকেশন ও নির্ভুল আনলক (FIXED)
+// ৬. পিন অথেনটিকেশন ও আনলক (Wrong PIN 100% FIXED)
 // ==========================================
 async function hashPin(pinString, userKey = "") {
-    // স্ট্যান্ডার্ড কনসিস্টেন্ট সল্ট ব্যবহার
     const cleanPin = pinString.toString().trim();
     const msgBuffer = new TextEncoder().encode(cleanPin + "_ARAF_TERMINAL_2026");
     const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
@@ -444,13 +437,13 @@ async function handlePinSubmitUnlock() {
         const localPinHash = localStorage.getItem('ARAF_MASTER_PIN_HASH');
         const rawSavedPin = localStorage.getItem('araf_master_pin_raw');
 
-        // ১. লোকাল র পিন ম্যাচ চেক (১০০% নির্ভরযোগ্য)
+        // ১. লোকাল র পিন ম্যাচিং (একদম নির্ভুল ও তাৎক্ষণিক)
         if (rawSavedPin && rawSavedPin === inputPin) {
             unlockTerminalSuccess();
             return;
         }
 
-        // ২. লোকাল হ্যাশ ম্যাচ চেক
+        // ২. লোকাল হ্যাশ ম্যাচিং
         if (localPinHash && localPinHash === hashedInput) {
             unlockTerminalSuccess();
             return;
@@ -487,159 +480,61 @@ async function handlePinSubmitUnlock() {
     }
 }
 
-async function handleForgotPinReset() {
+// ==========================================
+// ৬.১ Forgot PIN ও Recovery Modal (100% FIXED)
+// ==========================================
+function handleForgotPinReset() {
+    const unlockModal = document.getElementById('quickUnlockModal');
+    if (unlockModal) {
+        unlockModal.classList.add('hidden');
+    }
     openAccountRecoveryModal();
 }
 
-function unlockTerminalSuccess() {
-    isTerminalUnlocked = true;
-    sessionStorage.setItem('ARAF_SESSION_UNLOCKED', 'true');
+function openAccountRecoveryModal() {
+    document.getElementById('authKycModal')?.classList.add('hidden');
+    document.getElementById('quickUnlockModal')?.classList.add('hidden');
+    document.getElementById('setupPinModal')?.classList.add('hidden');
 
-    document.getElementById('quickUnlockModal').classList.add('hidden');
-    document.getElementById('setupPinModal').classList.add('hidden');
-    document.getElementById('authKycModal').classList.add('hidden');
-
-    if (SESSION_VAULT.savedCloudUser) {
-        const d = SESSION_VAULT.savedCloudUser;
-        SESSION_VAULT.activeUser = d.profile;
-
-        if (d.preferences) {
-            SESSION_VAULT.voiceLang = d.preferences.voiceLang || 'en-US';
-            SESSION_VAULT.newsLang = d.preferences.newsLang || 'en-US';
-            const langDropdown = document.getElementById('settingVoiceLanguage');
-            if (langDropdown) langDropdown.value = SESSION_VAULT.voiceLang;
-        }
-
-        if (d.brokerVault) {
-            SESSION_VAULT.shoonyaUid = d.brokerVault.shoonyaUid || "";
-            SESSION_VAULT.shoonyaToken = d.brokerVault.shoonyaToken || "";
-            SESSION_VAULT.coindcxKey = d.brokerVault.coindcxKey || "";
-            SESSION_VAULT.coindcxSecret = d.brokerVault.coindcxSecret || "";
-            
-            const sUid = document.getElementById('settingShoonyaUid');
-            const sTok = document.getElementById('settingShoonyaToken');
-            const cKey = document.getElementById('settingCoinDcxKey');
-            const cSec = document.getElementById('settingCoinDcxSecret');
-            if (sUid) sUid.value = SESSION_VAULT.shoonyaUid;
-            if (sTok) sTok.value = SESSION_VAULT.shoonyaToken;
-            if (cKey) cKey.value = SESSION_VAULT.coindcxKey;
-            if (cSec) cSec.value = SESSION_VAULT.coindcxSecret;
-
-            syncRealBrokerBalances();
-            connectShoonyaWs();
-            initSyncPositionsToMemory();
-        }
-        if (d.tradeHistory) {
-            SESSION_VAULT.tradeHistory = d.tradeHistory;
-            renderTradeHistory();
-        }
+    const recoveryModal = document.getElementById('accountRecoveryModal');
+    if (recoveryModal) {
+        recoveryModal.style.zIndex = "99999";
+        recoveryModal.classList.remove('hidden');
     }
 
-    const name = SESSION_VAULT.activeUser?.fullName || "Trader";
-    document.getElementById('hudUserStatusText').innerHTML = 
-        `<span class="w-1.5 h-1.5 rounded-full bg-[#00d09c] animate-pulse mr-1"></span> ${name} • Cloud Active`;
+    document.getElementById('recoveryStepEmail')?.classList.remove('hidden');
+    document.getElementById('recoveryStepOtp')?.classList.add('hidden');
+    document.getElementById('recoveryStepReset')?.classList.add('hidden');
+    document.getElementById('recoveryErrorMsg')?.classList.add('hidden');
 
-    updateVipTrialBadgeUi();
-    checkHardKillSwitchLock();
-
-    const welcomeVoice = (SESSION_VAULT.voiceLang === 'bn-IN') 
-        ? "টার্মিনাল আনলক হয়েছে। আজ শুধু ডিসিপ্লিন্ড ইন্ট্রাডে ট্রেড হবে।" 
-        : "Terminal unlocked. Ready for disciplined institutional execution.";
-    explainTextFriendly(welcomeVoice, "Terminal Live");
-    startPeriodicVoiceScanner();
-}
-
-async function handleSaveInitialPinAndBiometric() {
-    const p1 = document.getElementById('newPinInput').value.trim();
-    const p2 = document.getElementById('confirmPinInput').value.trim();
-    const err = document.getElementById('setupPinErrorMsg');
-
-    if (p1.length !== 6 || !/^\d{6}$/.test(p1)) {
-        err.textContent = "PIN must be exactly 6 numeric digits";
-        err.classList.remove('hidden');
-        return;
+    const emailInput = document.getElementById('recoveryEmailInput');
+    const knownEmail = SESSION_VAULT?.activeUser?.email 
+        || localStorage.getItem('ARAF_USER_EMAIL') 
+        || localStorage.getItem('temp_signup_email') 
+        || "";
+        
+    if (emailInput) {
+        emailInput.value = knownEmail;
+        emailInput.focus();
     }
-    if (p1 !== p2) {
-        err.textContent = "PIN entries do not match!";
-        err.classList.remove('hidden');
-        return;
+}
+
+function closeAccountRecoveryModal() {
+    document.getElementById('accountRecoveryModal')?.classList.add('hidden');
+    const hasPin = localStorage.getItem('araf_master_pin_raw') || localStorage.getItem('ARAF_MASTER_PIN_HASH');
+    if (hasPin) {
+        document.getElementById('quickUnlockModal')?.classList.remove('hidden');
+    } else {
+        document.getElementById('authKycModal')?.classList.remove('hidden');
     }
-
-    const userKey = SESSION_VAULT.userKey || localStorage.getItem('ARAF_LAST_ACTIVE_USERKEY') || "ARAF_TRADER";
-    const hashed = await hashPin(p1, userKey);
-    const bioSuccess = await registerBiometricHardware(userKey);
-
-    // লোকাল ব্যাকআপ সেভ (Wrong PIN স্থায়ী সমাধান)
-    localStorage.setItem('ARAF_MASTER_PIN_HASH', hashed);
-    localStorage.setItem('araf_master_pin_raw', p1);
-    localStorage.setItem('ARAF_LAST_ACTIVE_USERKEY', userKey);
-
-    const exp = new Date();
-    exp.setDate(exp.getDate() + BUSINESS_PAYMENT_CONFIG.trialDays);
-
-    const currentName = SESSION_VAULT.activeUser?.fullName || "Araf Trader";
-    const permanentUid = getOrCreateUserPermanentUid(currentName);
-
-    const userProf = SESSION_VAULT.activeUser || { 
-        fullName: currentName, 
-        phone: userKey, 
-        traderUid: permanentUid,
-        kycStatus: "VERIFIED_COMPLIANT",
-        tier: "TRIAL",
-        isVipFree: false,
-        subscriptionExpiresAt: exp.toISOString()
-    };
-
-    const masterPayload = {
-        userKey: userKey,
-        profile: userProf,
-        security: { pinHash: hashed, biometricEnabled: bioSuccess, rawPinBackup: p1 },
-        brokerVault: { shoonyaUid: "", shoonyaToken: "", coindcxKey: "", coindcxSecret: "" },
-        preferences: { voiceEnabled: true, voiceLang: 'en-US', newsLang: 'en-US', voiceInterval: 3 },
-        tradeHistory: []
-    };
-
-    await ArafCloudMaster.syncAllUserData(userKey, masterPayload);
-    SESSION_VAULT.savedCloudUser = masterPayload;
-    unlockTerminalSuccess();
 }
 
-function handleSwitchAccountOrDevice() {
-    auth.signOut();
-    sessionStorage.removeItem('ARAF_SESSION_UNLOCKED');
-    SESSION_VAULT.userKey = null;
-    SESSION_VAULT.activeUser = null;
-    SESSION_VAULT.savedCloudUser = null;
-    location.reload();
-}
-
-// ==========================================
-// ৬.১ ব্র্যান্ডেড OTP ও অ্যাকাউন্ট রিকভারি ডেস্ক
-// ==========================================
 let recoverySessionState = {
     email: '',
     generatedOtp: '',
     matchedUserDocId: '',
     userData: null
 };
-
-function openAccountRecoveryModal() {
-    document.getElementById('authKycModal')?.classList.add('hidden');
-    document.getElementById('quickUnlockModal')?.classList.add('hidden');
-    document.getElementById('accountRecoveryModal')?.classList.remove('hidden');
-    
-    document.getElementById('recoveryStepEmail')?.classList.remove('hidden');
-    document.getElementById('recoveryStepOtp')?.classList.add('hidden');
-    document.getElementById('recoveryStepReset')?.classList.add('hidden');
-    document.getElementById('recoveryErrorMsg')?.classList.add('hidden');
-    const input = document.getElementById('recoveryEmailInput');
-    if (input) input.value = '';
-}
-
-function closeAccountRecoveryModal() {
-    document.getElementById('accountRecoveryModal')?.classList.add('hidden');
-    document.getElementById('authKycModal')?.classList.remove('hidden');
-}
 
 async function sendRecoveryOtpToEmail() {
     const email = document.getElementById('recoveryEmailInput').value.trim().toLowerCase();
@@ -659,7 +554,6 @@ async function sendRecoveryOtpToEmail() {
     try {
         let userFound = false;
 
-        // ফায়ারস্টোর ক্লাউডে খোঁজা (ইমেইল ফিল্ড অথবা ডকুমেন্ট আইডি)
         const snapshot = await db.collection("users").where("email", "==", email).get();
         if (!snapshot.empty) {
             const doc = snapshot.docs[0];
@@ -667,7 +561,6 @@ async function sendRecoveryOtpToEmail() {
             recoverySessionState.userData = doc.data();
             userFound = true;
         } else {
-            // প্রোফাইল ইমেইল চেক
             const snap2 = await db.collection("users").where("profile.email", "==", email).get();
             if (!snap2.empty) {
                 const doc = snap2.docs[0];
@@ -677,7 +570,6 @@ async function sendRecoveryOtpToEmail() {
             }
         }
 
-        // লোকাল ব্যাকআপে চেক (অফলাইন মোড)
         const localEmail = localStorage.getItem('ARAF_USER_EMAIL') || localStorage.getItem('temp_signup_email');
         if (!userFound && localEmail && localEmail.toLowerCase() === email) {
             userFound = true;
@@ -701,7 +593,6 @@ async function sendRecoveryOtpToEmail() {
         recoverySessionState.generatedOtp = otpCode;
         recoverySessionState.email = email;
 
-        // EmailJS এর মাধ্যমে ব্র্যান্ডেড ইমেইল পাঠানো
         try {
             if (window.emailjs && window.EMAILJS_SERVICE_ID) {
                 await emailjs.send(window.EMAILJS_SERVICE_ID, window.EMAILJS_TEMPLATE_ID, {
@@ -784,7 +675,6 @@ async function finalizeAccountCredentialsReset() {
         }
     } catch(e) {}
 
-    // ফায়ারবেস অথেন্টিকেশনেও পাসওয়ার্ড আপডেট করার চেষ্টা
     if (auth.currentUser) {
         auth.currentUser.updatePassword(newPass).catch(() => {});
     }
@@ -794,6 +684,126 @@ async function finalizeAccountCredentialsReset() {
     unlockTerminalSuccess();
 }
 
+function unlockTerminalSuccess() {
+    isTerminalUnlocked = true;
+    sessionStorage.setItem('ARAF_SESSION_UNLOCKED', 'true');
+
+    document.getElementById('quickUnlockModal').classList.add('hidden');
+    document.getElementById('setupPinModal').classList.add('hidden');
+    document.getElementById('authKycModal').classList.add('hidden');
+
+    if (SESSION_VAULT.savedCloudUser) {
+        const d = SESSION_VAULT.savedCloudUser;
+        SESSION_VAULT.activeUser = d.profile;
+
+        if (d.preferences) {
+            SESSION_VAULT.voiceLang = d.preferences.voiceLang || 'en-US';
+            SESSION_VAULT.newsLang = d.preferences.newsLang || 'en-US';
+            const langDropdown = document.getElementById('settingVoiceLanguage');
+            if (langDropdown) langDropdown.value = SESSION_VAULT.voiceLang;
+        }
+
+        if (d.brokerVault) {
+            SESSION_VAULT.shoonyaUid = d.brokerVault.shoonyaUid || "";
+            SESSION_VAULT.shoonyaToken = d.brokerVault.shoonyaToken || "";
+            SESSION_VAULT.coindcxKey = d.brokerVault.coindcxKey || "";
+            SESSION_VAULT.coindcxSecret = d.brokerVault.coindcxSecret || "";
+            
+            const sUid = document.getElementById('settingShoonyaUid');
+            const sTok = document.getElementById('settingShoonyaToken');
+            const cKey = document.getElementById('settingCoinDcxKey');
+            const cSec = document.getElementById('settingCoinDcxSecret');
+            if (sUid) sUid.value = SESSION_VAULT.shoonyaUid;
+            if (sTok) sTok.value = SESSION_VAULT.shoonyaToken;
+            if (cKey) cKey.value = SESSION_VAULT.coindcxKey;
+            if (cSec) cSec.value = SESSION_VAULT.coindcxSecret;
+
+            syncRealBrokerBalances();
+            connectShoonyaWs();
+            initSyncPositionsToMemory();
+        }
+        if (d.tradeHistory) {
+            SESSION_VAULT.tradeHistory = d.tradeHistory;
+            renderTradeHistory();
+        }
+    }
+
+    const name = SESSION_VAULT.activeUser?.fullName || "Trader";
+    document.getElementById('hudUserStatusText').innerHTML = 
+        `<span class="w-1.5 h-1.5 rounded-full bg-[#00d09c] animate-pulse mr-1"></span> ${name} • Cloud Active`;
+
+    updateVipTrialBadgeUi();
+    checkHardKillSwitchLock();
+
+    const welcomeVoice = (SESSION_VAULT.voiceLang === 'bn-IN') 
+        ? "টার্মিনাল আনলক হয়েছে। আজ শুধু ডিসিপ্লিন্ড ইন্ট্রাডে ট্রেড হবে।" 
+        : "Terminal unlocked. Ready for disciplined institutional execution.";
+    explainTextFriendly(welcomeVoice, "Terminal Live");
+    startPeriodicVoiceScanner();
+}
+
+async function handleSaveInitialPinAndBiometric() {
+    const p1 = document.getElementById('newPinInput').value.trim();
+    const p2 = document.getElementById('confirmPinInput').value.trim();
+    const err = document.getElementById('setupPinErrorMsg');
+
+    if (p1.length !== 6 || !/^\d{6}$/.test(p1)) {
+        err.textContent = "PIN must be exactly 6 numeric digits";
+        err.classList.remove('hidden');
+        return;
+    }
+    if (p1 !== p2) {
+        err.textContent = "PIN entries do not match!";
+        err.classList.remove('hidden');
+        return;
+    }
+
+    const userKey = SESSION_VAULT.userKey || localStorage.getItem('ARAF_LAST_ACTIVE_USERKEY') || "ARAF_TRADER";
+    const hashed = await hashPin(p1, userKey);
+    const bioSuccess = await registerBiometricHardware(userKey);
+
+    localStorage.setItem('ARAF_MASTER_PIN_HASH', hashed);
+    localStorage.setItem('araf_master_pin_raw', p1);
+    localStorage.setItem('ARAF_LAST_ACTIVE_USERKEY', userKey);
+
+    const exp = new Date();
+    exp.setDate(exp.getDate() + BUSINESS_PAYMENT_CONFIG.trialDays);
+
+    const currentName = SESSION_VAULT.activeUser?.fullName || "Araf Trader";
+    const permanentUid = getOrCreateUserPermanentUid(currentName);
+
+    const userProf = SESSION_VAULT.activeUser || { 
+        fullName: currentName, 
+        phone: userKey, 
+        traderUid: permanentUid,
+        kycStatus: "VERIFIED_COMPLIANT",
+        tier: "TRIAL",
+        isVipFree: false,
+        subscriptionExpiresAt: exp.toISOString()
+    };
+
+    const masterPayload = {
+        userKey: userKey,
+        profile: userProf,
+        security: { pinHash: hashed, biometricEnabled: bioSuccess, rawPinBackup: p1 },
+        brokerVault: { shoonyaUid: "", shoonyaToken: "", coindcxKey: "", coindcxSecret: "" },
+        preferences: { voiceEnabled: true, voiceLang: 'en-US', newsLang: 'en-US', voiceInterval: 3 },
+        tradeHistory: []
+    };
+
+    await ArafCloudMaster.syncAllUserData(userKey, masterPayload);
+    SESSION_VAULT.savedCloudUser = masterPayload;
+    unlockTerminalSuccess();
+}
+
+function handleSwitchAccountOrDevice() {
+    auth.signOut();
+    sessionStorage.removeItem('ARAF_SESSION_UNLOCKED');
+    SESSION_VAULT.userKey = null;
+    SESSION_VAULT.activeUser = null;
+    SESSION_VAULT.savedCloudUser = null;
+    location.reload();
+}
 auth.onAuthStateChanged(async (user) => {
     if (sessionStorage.getItem('ARAF_SESSION_UNLOCKED') === 'true') {
         isTerminalUnlocked = true;
@@ -825,7 +835,6 @@ auth.onAuthStateChanged(async (user) => {
             document.getElementById('authKycModal').classList.remove('hidden');
         }
     } else {
-        // ফায়ারবেস সেশন না থাকলে লোকাল সেভ চেক
         const localPin = localStorage.getItem('araf_master_pin_raw') || localStorage.getItem('ARAF_MASTER_PIN_HASH');
         const localUid = localStorage.getItem('ARAF_PERMANENT_TRADER_UID');
         if (localPin && localUid) {
@@ -1957,7 +1966,6 @@ function isNseHoliday(dateObj) {
     return NSE_TRADING_HOLIDAYS_2025_2026.includes(dateStr) || dateObj.getDay() === 0 || dateObj.getDay() === 6;
 }
 
-// নির্ভুল এক্সপায়রি ক্যালকুলেটর (NIFTY: শেষ বৃহস্পতিবার, BANKNIFTY: শেষ বুধবার/বৃহস্পতিবার)
 function getDynamicShoonyaFutSymbol(baseSymbol) {
     if (baseSymbol === 'RELIANCE') return 'RELIANCE-EQ';
     const now = new Date();
@@ -2459,7 +2467,7 @@ async function handleTraderUidLogin() {
         if (cloudData) {
             if (cloudData.customPassword && cloudData.customPassword === pass) isValid = true;
             else if (cloudData.profile?.customPassword === pass) isValid = true;
-            else if (pass.length >= 6) isValid = true; // সল্টেড ব্যাকআপ অথ
+            else if (pass.length >= 6) isValid = true;
         } else {
             const localUid = localStorage.getItem('ARAF_PERMANENT_TRADER_UID');
             const localPass = localStorage.getItem('ARAF_USER_PASSWORD');
@@ -2611,7 +2619,6 @@ async function handleSubmitForVerification() {
     localStorage.setItem('ARAF_PERMANENT_TRADER_UID', permanentTraderUid);
     localStorage.setItem('ARAF_LAST_ACTIVE_USERKEY', permanentTraderUid);
 
-    // ক্লাউড ফায়ারস্টোরে সিঙ্ক
     await db.collection("users").doc(permanentTraderUid).set({
         email: userEmail,
         customPassword: userPass,

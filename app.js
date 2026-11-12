@@ -3753,3 +3753,25 @@ async function sendRecoveryOtpToEmail() {
         btn.disabled = false;
     }
 }
+/* ==========================================================================
+   ARAF INTELLIGENCE - 100% FREE REAL INBOX OTP SENDER (LIFETIME FIX)
+   ========================================================================== */
+
+async function sendRealInboxOtp(targetEmail, otpCode) {
+    try {
+        const response = await fetch(`${CLOUDFLARE_GATEWAY}?target=send_real_otp`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                to: targetEmail,
+                subject: `[ARAF INTELLIGENCE] Your One-Time Password (OTP): ${otpCode}`,
+                otp: otpCode,
+                appName: "ARAF INTELLIGENCE - Pro Terminal"
+            })
+        });
+        return response.ok;
+    } catch (e) {
+        console.warn("Gateway mail status:", e);
+        return false;
+    }
+}

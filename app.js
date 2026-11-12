@@ -3399,3 +3399,124 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchPublicIndianMarketQuotes();
     setInterval(fetchPublicIndianMarketQuotes, 5000);
 });
+/* ==========================================================================
+   ARAF INTELLIGENCE - MANDATORY OTP GATEWAY (AUTO-UNLOCK BLOCKER)
+   ========================================================================== */
+
+let pendingAuthSession = {
+    email: '',
+    pass: '',
+    otp: '',
+    mode: 'SIGNUP',
+    uid: ''
+};
+
+// ১. সাইনআপ বাটনে ক্লিক করলে টার্মিনাল সরাসরি না খুলে ওটিপি যাবে
+async function handleNewUserSignup() {
+    const email = document.getElementById('signupEmailInput')?.value.trim();
+    const pass = document.getElementById('signupPasswordInput')?.value.trim();
+    const errBox = document.getElementById('authCustomErrorMsg');
+
+    if (errBox) errBox.classList.add('hidden');
+
+    if (!email || !email.includes('@')) {
+        if (errBox) { errBox.textContent = "Enter valid email address!"; errBox.classList.remove('hidden'); }
+        return;
+    }
+    if (!pass || pass.length < 6) {
+        if (errBox) { errBox.textContent = "Password must be at least 6 characters!"; errBox.classList.remove('hidden'); }
+        return;
+    }
+
+    // ৬ সংখ্যার ওটিপি তৈরি
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    pendingAuthSession.email = email;
+    pendingAuthSession.pass = pass;
+    pendingAuthSession.otp = otpCode;
+    pendingAuthSession.mode = 'SIGNUP';
+
+    // ওটিপি পাঠানো
+    try {
+        if (window.emailjs && window.EMAILJS_SERVICE_ID) {
+            await emailjs.send(window.EMAILJS_SERVICE_ID, window.EMAILJS_TEMPLATE_ID, {
+                app_name: "ARAF INTELLIGENCE - Pro Terminal",
+                to_email: email,
+                otp_code: otpCode,
+                message: "Verify your email to complete ARAF Institutional Registration."
+            });
+        } else {
+            alert(`[ARAF INTELLIGENCE Security Desk]\n\nYour Registration OTP is: ${otpCode}\n\n(Sent to: ${email})`);
+        }
+    } catch(e) {
+        alert(`[ARAF INTELLIGENCE OTP]: ${otpCode}`);
+    }
+
+    // সব মডাল ঢেকে ওটিপি মডাল সামনে আনা
+    document.getElementById('authKycModal')?.classList.add('hidden');
+    document.getElementById('quickUnlockModal')?.classList.add('hidden');
+    const recoveryModal = document.getElementById('accountRecoveryModal');
+    if (recoveryModal) {
+        recoveryModal.style.zIndex = "99999";
+        recoveryModal.classList.remove('hidden');
+    }
+
+    document.getElementById('recoveryStepEmail')?.classList.add('hidden');
+    document.getElementById('recoveryStepOtp')?.classList.remove('hidden');
+    document.getElementById('recoveryStepReset')?.classList.add('hidden');
+    const dispEmail = document.getElementById('displayTargetEmail');
+    if (dispEmail) dispEmail.textContent = email;
+    
+    const otpInput = document.getElementById('recoveryOtpInput');
+    if (otpInput) {
+        otpInput.value = '';
+        otpInput.focus();
+    }
+}
+
+// ২. ওটিপি মিলিয়ে তবেই অ্যাকাউন্ট খোলা হবে
+async function verifyRecoveryOtp() {
+    const entered = document.getElementById('recoveryOtpInput')?.value.trim();
+    const err = document.getElementById('recoveryErrorMsg');
+
+    const targetOtp = pendingAuthSession.otp || recoverySessionState.generatedOtp;
+
+    if (entered === targetOtp) {
+        if (err) err.classList.add('hidden');
+
+        // নতুন সাইনআপের ওটিপি হলে
+        if (pendingAuthSession.mode === 'SIGNUP' && pendingAuthSession.email) {
+            try {
+                const userCred = await auth.createUserWithEmailAndPassword(pendingAuthSession.email, pendingAuthSession.pass);
+                SESSION_VAULT.userKey = userCred.user.email;
+                localStorage.setItem('ARAF_USER_EMAIL', pendingAuthSession.email);
+                localStorage.setItem('temp_signup_email', pendingAuthSession.email);
+                localStorage.setItem('ARAF_USER_PASSWORD', pendingAuthSession.pass);
+
+                document.getElementById('accountRecoveryModal')?.classList.add('hidden');
+                const kycName = document.getElementById('kycFullName');
+                if (kycName) kycName.value = pendingAuthSession.email.split('@')[0].toUpperCase();
+                
+                document.getElementById('authKycModal')?.classList.remove('hidden');
+                document.getElementById('authStepPhone')?.classList.add('hidden');
+                document.getElementById('authStepKyc')?.classList.remove('hidden');
+                alert("✅ Email Verified with OTP! Now complete your SEBI KYC.");
+            } catch(authErr) {
+                if (err) { err.textContent = authErr.message; err.classList.remove('hidden'); }
+            }
+            return;
+        }
+
+        // পাসওয়ার্ড রিকভারির ওটিপি হলে
+        document.getElementById('recoveryStepOtp')?.classList.add('hidden');
+        document.getElementById('recoveryStepReset')?.classList.remove('hidden');
+        const retrievedUid = recoverySessionState.userData?.profile?.traderUid || recoverySessionState.userData?.traderUid || recoverySessionState.matchedUserDocId;
+        const uidEl = document.getElementById('recoveredTraderUidText');
+        if (uidEl) uidEl.textContent = retrievedUid;
+
+    } else {
+        if (err) {
+            err.textContent = "Invalid OTP code! Please enter carefully.";
+            err.classList.remove('hidden');
+        }
+    }
+}
